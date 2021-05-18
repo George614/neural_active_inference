@@ -4,7 +4,7 @@ This repo contains the proposed QAI Model, which is an active inference (AI) age
 2) We only need the simple Q-learning bootstrap principle to train this system (as opposed to policy gradients)
 3) We normalize the instrumental and/or epistemic (scalar) signals according to the dynamic normalization scheme proposed in Ororbia & Mali (2021).
 
-To run the code, you can use the following Bash commands.
+To run the code, you can use the following Bash commands.<br>
 To fit/train a local prior model to expert data (imitation learning), which will be later used in the active inference agent (if a local prior is desired), then run the following command (after setting desired values in <code>fit_mcar_prior.cfg</code>):
 <pre>
 $ python train_prior.py --cfg_fname=fit_mcar_prior.cfg --gpu_id=0 
@@ -15,6 +15,6 @@ $ python train_agent.py --cfg_fname=run_mcar_ai.cfg --gpu_id=0
 </pre>
 
 Inside the training configuration file, you can choose to use an alternative prior preference as follows:
-1) To use a local prior (model), set <pre>instru_term = prior_local</pre> which also requires running train_prior.py and storing the prior in the correct folder is used
+1) To use a local prior (model), set <pre>instru_term = prior_local</pre> which also requires running train_prior.py and storing the prior in the correct folder is used. Make sure you set the <code>prior_model_save_path</code> in the config file to point to wherever you dump/save the prior model.
 2) To use a global, hand-coded prior <pre>instru_term = prior_global</pre> which requires changing the tensor variable <code>self.global_mu</code> inside the QAIModel (in <code>src/model/qai_model.py</code>) to a vector of encoded mean values (default is <code>None</code>.
 4) To use the reward as the global prior, set <pre>instru_term = prior_reward</pre> where we justify this by appealing to the Complete Class Theorem.
