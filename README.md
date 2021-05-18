@@ -13,4 +13,6 @@ $ python train_agent.py --cfg_fname=run_mcar_ai.cfg --gpu_id=0  # this trains th
 </code>
 
 Inside the training configuration file, you can choose to use an alternative prior preference as follows:
-1) 
+1) Set <pre>instru_term = prior_local</pre> to use a local prior preference (requires running train_prior.py and storing the prior in the correct folder is used)
+2) Set <pre>instru_term = prior_global</pre> to use a global hard-coded prior preference
+3) Set <pre>instru_term = prior_reward</pre> to use the environment's reward signal as the prior preference (due to Complete Class Theorem)
