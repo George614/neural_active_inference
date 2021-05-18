@@ -7,7 +7,10 @@ This repo contains the proposed QAI Model, which is an active inference agent ba
 To run the code, you can use the following Bash commands:<br>
 <code>
 $ python train_prior.py --cfg_fname=fit_mcar_prior.cfg --gpu_id=0  # this fits/trains the local prior model to be used in the active inference agent (if a local prior is desired) 
-</code>
+</code><br>
 <code>
 $ python train_agent.py --cfg_fname=run_mcar_ai.cfg --gpu_id=0  # this trains the agent according to whatever is configured inside the *.cfg file
 </code>
+
+Inside the training configuration file, you can choose to use an alternative prior preference as follows:
+1) 
