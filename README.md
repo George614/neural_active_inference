@@ -13,6 +13,6 @@ $ python train_agent.py --cfg_fname=run_mcar_ai.cfg --gpu_id=0  # this trains th
 </code>
 
 Inside the training configuration file, you can choose to use an alternative prior preference as follows:
-1) Set <pre>instru_term = prior_local</pre> to use a local prior preference (requires running train_prior.py and storing the prior in the correct folder is used)
-2) Set <pre>instru_term = prior_global</pre> to use a global hard-coded prior preference
-3) Set <pre>instru_term = prior_reward</pre> to use the environment's reward signal as the prior preference (due to Complete Class Theorem)
+1) To use a local prior (model), set <pre>instru_term = prior_local</pre> which also requires running train_prior.py and storing the prior in the correct folder is used
+2) To use a global, hand-coded prior <pre>instru_term = prior_global</pre> which requires changing self.global_mu inside the QAIModel to a vector of encoded mean values.
+3) To use the reward as the global prior, set <pre>instru_term = prior_reward</pre> (this is justified by the Complete Class Theorem).
