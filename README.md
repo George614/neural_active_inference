@@ -4,7 +4,7 @@ This repo contains the proposed QAI Model, which is an active inference agent ba
 2) We only need the simple Q-learning bootstrap principle to train this system (as opposed to policy gradients)
 3) We normalize the instrumental and/or epistemic (scalar) signals according to the dynamic normalization scheme proposed in Ororbia & Mali (2021).
 
-To run the code, you can use the following Bash commands:
+To run the code, you can use the following Bash commands:<br>
 <code>
 $ python train_prior.py --cfg_fname=fit_mcar_prior.cfg --gpu_id=0  # this fits/trains the local prior model to be used in the active inference agent (if a local prior is desired) 
 </code>
