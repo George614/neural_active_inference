@@ -18,11 +18,11 @@ class QAIModel:
     """
     def __init__(self, prior, args):
         self.prior = prior
-        self.global_mu = None
         self.args = args
 
         self.dim_o = int(args.getArg("dim_o"))  # observation size
         self.dim_a = int(args.getArg("dim_a"))  # action size
+        self.global_mu = tf.zeros((1, self.dim_o), name="speed_diff")
         self.layer_norm = (args.getArg("layer_norm").strip().lower() == 'true')
         self.l2_reg = float(args.getArg("l2_reg"))
         self.act_fx = args.getArg("act_fx")

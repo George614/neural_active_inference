@@ -1,6 +1,9 @@
 import os
+import logging
 import sys, getopt, optparse
 import pickle
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
+logging.getLogger('tensorflow').setLevel(logging.FATAL)
 import tensorflow as tf
 import numpy as np
 import gym
@@ -9,6 +12,7 @@ from utils import parse_int_list, save_object, load_object
 from config import Config
 sys.path.insert(0, 'model/')
 from qai_model import QAIModel
+from interception_py_env import InterceptionEnv
 from buffers import ReplayBuffer, NaivePrioritizedBuffer
 from scheduler import Linear_schedule, Exponential_schedule
 
@@ -75,7 +79,8 @@ if use_gpu:
     print(" > Using GPU ID {0}".format(mid))
     os.environ["CUDA_VISIBLE_DEVICES"]="{0}".format(mid)
     gpu_tag = '/GPU:0'
-    #tf.config.experimental.set_memory_growth(gpu, True)
+    gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+    tf.config.experimental.set_memory_growth(gpu_devices[mid], True)
 else:
     os.environ["CUDA_VISIBLE_DEVICES"]="-1"
     gpu_tag = '/CPU:0'
@@ -144,9 +149,12 @@ else:
     expert_buffer = ReplayBuffer(buffer_size, seed=seed)
     replay_buffer = ReplayBuffer(buffer_size, seed=seed)
 
+#env = gym.make(args.getArg("env_name"))
+env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=0)
 # set seeds
 tf.random.set_seed(seed)
 np.random.seed(seed)
+env.seed(seed=seed)
 
 ################################################################################
 ### load and pre-process human expert-batch data ###
@@ -197,7 +205,6 @@ for trial in range(n_trials):
     rho_anneal_start = False
 
     print(" >> Starting simulation...")
-    env = gym.make(args.getArg("env_name"))
     observation = env.reset()
 
     # for frame_idx in range(1, num_frames + 1): # deprecated
