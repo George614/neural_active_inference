@@ -33,10 +33,10 @@ class QAIModel:
         self.normalize_signals = (args.getArg("normalize_signals").strip().lower() == 'true')
         self.EFE_bound = 1.0
         self.max_R_ti = 1.0
-        self.min_R_ti = 0.01 #-1.0 #0.01
+        self.min_R_ti = 0.01 #-1.0 for GLL #0.01
         self.max_R_te = 1.0
-        self.min_R_te = 0.01 #-1.0 #0.01
-        self.efe_loss = "mse"
+        self.min_R_te = 0.01 #-1.0 for GLL #0.01
+        self.efe_loss = str(args.getArg("efe_loss"))
 
         hid_dims = [128, 128]
 
@@ -105,7 +105,7 @@ class QAIModel:
                     o_prior_mu, o_prior_std, _ = self.prior.predict(obv_t)
                     # difference between preferred future and actual future, i.e. instrumental term
                     #R_ti = -1.0 * g_nll(obv_next, o_prior_mu, o_prior_std * o_prior_std, keep_batch=True)
-                    R_ti = mse(x_true=obv_next, x_pred=o_prior_mu)
+                    R_ti = mse(x_true=obv_next, x_pred=o_prior_mu, keep_batch=True)
                     if self.normalize_signals is True:
                         a = -self.EFE_bound
                         b = self.EFE_bound
@@ -116,7 +116,7 @@ class QAIModel:
                         # clip the instrumental value
                         R_ti = tf.clip_by_value(R_ti, -50.0, 50.0)
                 elif self.instru_term == "prior_global":
-                    R_ti = mse(x_true=obv_next, x_pred=self.global_mu)
+                    R_ti = mse(x_true=obv_next, x_pred=self.global_mu, keep_batch=True)
                     if self.normalize_signals is True:
                         a = -self.EFE_bound
                         b = self.EFE_bound
@@ -129,7 +129,7 @@ class QAIModel:
                 else:
                     R_ti = reward
                     if len(R_ti.shape) < 2:
-                        R_ti = tf.expand_dims(R_ti,axis=1)
+                        R_ti = tf.expand_dims(R_ti, axis=1)
                 ### epistemic term ###
                 delta = (obv_next - o_next_tran_mu)
                 R_te = tf.reduce_sum(delta * delta, axis=1, keepdims=True)
@@ -175,7 +175,7 @@ class QAIModel:
                 with tape.stop_recording():
                     # EFE values for next state, s_t+1 is from transition model instead of encoder
                     efe_target, _, _ = self.efe_target.predict(obv_next)
-                    efe_new = tf.expand_dims(tf.reduce_max(efe_target, axis=1),axis=1) # max EFE values at t+1
+                    efe_new = tf.expand_dims(tf.reduce_max(efe_target, axis=1), axis=1) # max EFE values at t+1
                     y_j = R_t + (efe_new * self.gamma_d) * (1.0 - done)
                     y_j = (action * y_j) + ( efe_old * (1.0 - action) )
 

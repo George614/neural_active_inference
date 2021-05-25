@@ -344,7 +344,7 @@ def squared_error_vec(x_reconst, x_true):
     ############################################################################
     return se
 
-def huber(x_true, x_pred, keep_batch=False):
+def huber_Alex(x_true, x_pred, keep_batch=False):
     ''' Huber Loss (smooth L1 loss) '''
     diff = x_pred - x_true
     beta = 1.0
@@ -361,6 +361,19 @@ def huber(x_true, x_pred, keep_batch=False):
         huber = tf.reduce_sum(v_loss, axis=-1)
         huber = tf.expand_dims(huber,axis=1)
     return huber
+
+def huber(x_true, x_pred, delta=1.0, keep_batch=False):
+    error = x_true - x_pred
+    within_d = tf.math.less_equal(tf.abs(error), delta)
+    within_d = tf.cast(within_d, dtype=tf.float32)
+    loss_in = 0.5 * error * error
+    loss_out = 0.5 * delta * delta + delta * (tf.abs(error) - delta)
+    loss = within_d * loss_in + (1 - within_d) * loss_out
+    if tf.greater(tf.rank(loss), 1):
+        loss = tf.reduce_sum(loss, axis=-1)
+    if keep_batch:
+        return loss
+    return tf.math.reduce_mean(loss, axis=0)
 
 def aleatoric_loss(y_true, y_mu, y_log_var):
     N = y_true.shape[0]
@@ -380,7 +393,7 @@ def mse(x_true, x_pred, keep_batch=False):
         mse = tf.math.reduce_mean(se)
     else:
         mse = tf.reduce_sum(se, axis=-1)
-        mse = tf.expand_dims(mse,axis=1)
+        mse = tf.expand_dims(mse, axis=1)
     return mse
 
 def kl_d(mu_p, sigSqr_p, log_sig_p, mu_q, sigSqr_q, log_sig_q, keep_batch=False):
