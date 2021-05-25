@@ -36,6 +36,10 @@ class QAIModel:
         self.min_R_ti = 0.01 #-1.0 for GLL #0.01
         self.max_R_te = 1.0
         self.min_R_te = 0.01 #-1.0 for GLL #0.01
+        self.obv_clip = 40.0
+        self.obv_bound = 1.0
+        self.max_obv = 1.0
+        self.min_obv = -1.0
         self.efe_loss = str(args.getArg("efe_loss"))
 
         hid_dims = [128, 128]
@@ -92,6 +96,17 @@ class QAIModel:
         pass
 
     def train_step(self, obv_t, obv_next, action, done, weights=None, reward=None):
+        if self.normalize_signals:
+            obv_t = tf.clip_by_value(obv_t, -self.obv_clip, self.obv_clip)
+            obv_next = tf.clip_by_value(obv_next, -self.obv_clip, self.obv_clip)
+            a = -self.obv_bound
+            b = self.obv_bound
+            self.max_obv = tf.math.maximum(self.max_obv, tf.math.reduce_max(obv_t))
+            self.max_obv = tf.math.maximum(self.max_obv, tf.math.reduce_max(obv_next))
+            self.min_obv = tf.math.minimum(self.min_obv, tf.math.reduce_min(obv_t))
+            self.min_obv = tf.math.minimum(self.min_obv, tf.math.reduce_min(obv_next))
+            obv_t = (obv_t - self.min_obv) * (b - a) / (self.max_obv - self.min_obv) + a
+            obv_next = (obv_next - self.min_obv) * (b - a) / (self.max_obv - self.min_obv) + a
         with tf.GradientTape(persistent=True) as tape:
             ### run s_t and a_t through transition model ###
             o_next_tran_mu, _, _ = self.transition.predict(tf.concat([obv_t, action], axis=-1))
