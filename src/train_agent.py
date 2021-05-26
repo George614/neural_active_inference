@@ -391,3 +391,30 @@ for trial in range(n_trials):
     agent_fname = "{0}trial{1}".format(out_dir, trial)
     print(" => Saving reward sequence to ",agent_fname)
     np.save("{0}_R".format(agent_fname), np.array(global_reward))
+
+plot_rewards = args.getArg("plot_rewards").strip().lower() == 'true'
+if plot_rewards:
+    from pathlib import Path
+    import matplotlib.pyplot as plt
+    result_dir = Path(out_dir)
+    reward_list = []
+    for i, stuff in enumerate(list(result_dir.glob("*.npy"))):
+        rewards = np.load(str(stuff))
+        reward_list.append(rewards)
+        fig = plt.figure()
+        line = plt.plot(np.arange(len(rewards)), rewards, linewidth=1)
+        plt.xlabel("Episodes")
+        plt.ylabel("Rewards")
+        fig.savefig(str(result_dir)+"\\trial_{}.png".format(i), dpi=200)
+    reward_list = np.asarray(reward_list)
+    mean_rewards = np.mean(reward_list, axis=0)
+    std_rewards = np.std(reward_list, axis=0)
+    fig, ax = plt.subplots()
+    ax.plot(np.arange(len(mean_rewards)), mean_rewards,alpha=0.7, color='red', label='mean', linewidth=0.5)
+    ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, None), np.clip(mean_rewards + std_rewards, 0, 100), color='#888888', alpha=0.4)
+    ax.legend(loc='upper right')
+    ax.set_ylabel("Rewards")
+    ax.set_xlabel("Number of episodes")
+    ax.set_title("Episode rewards")
+    fig.savefig(str(result_dir) + "\\mean_rewards.png", dpi=200)
+    
