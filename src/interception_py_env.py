@@ -348,13 +348,13 @@ class InterceptionEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    test = InterceptionEnv()
-    test.reset(target_speed_idx=2, approach_angle_idx=0)
+    test = InterceptionEnv(target_speed_idx=2, approach_angle_idx=0)
+    test.reset()
     frame_duration = 1 / test.FPS
 
     test.render()
     prev_time = time.time()
-    while not test.step(1)[2]:
+    while not test.step(0)[2]:
         time.sleep(max(frame_duration - (time.time() - prev_time), 0))
         prev_time = time.time()
         test.render()
