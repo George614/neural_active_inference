@@ -149,7 +149,7 @@ else:
     expert_buffer = ReplayBuffer(buffer_size, seed=seed)
     replay_buffer = ReplayBuffer(buffer_size, seed=seed)
 
-#env = gym.make(args.getArg("env_name"))
+# env = gym.make(args.getArg("env_name"))
 env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=0)
 # set seeds
 tf.random.set_seed(seed)
@@ -221,6 +221,7 @@ for trial in range(n_trials):
         while not done:
             frame_idx += 1
             epsilon = epsilon_by_frame(frame_idx)
+            epsilon = 0.0
             pplModel.epsilon.assign(epsilon)
 
             obv = tf.convert_to_tensor(observation, dtype=tf.float32)
@@ -371,7 +372,7 @@ for trial in range(n_trials):
         print("episode {}, r.mu = {:.3f}  win.mu = {:.3f}".format(ep_idx+1, episode_reward, reward_window_mean))
         print("-----------------------------------------------------------------")
         if ep_idx % 50 == 0:
-            agent_fname = "{0}trial{1}_current".format(out_dir,trial,(ep_idx+1))
+            agent_fname = "{0}trial{1}".format(out_dir, trial)
             print(" => Saving reward sequence to ",agent_fname)
             np.save("{0}_R".format(agent_fname), np.array(global_reward))
 
@@ -387,6 +388,6 @@ for trial in range(n_trials):
         '''
 
     env.close()
-    agent_fname = "{0}trial{1}_current".format(out_dir,trial,(ep_idx+1))
+    agent_fname = "{0}trial{1}".format(out_dir, trial)
     print(" => Saving reward sequence to ",agent_fname)
     np.save("{0}_R".format(agent_fname), np.array(global_reward))
