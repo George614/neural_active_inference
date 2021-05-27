@@ -31,6 +31,7 @@ class QAIModel:
         self.use_sum_q = (args.getArg("use_sum_q").strip().lower() == 'true')
         self.instru_term = args.getArg("instru_term")
         self.normalize_signals = (args.getArg("normalize_signals").strip().lower() == 'true')
+        self.normalize_obvs = (args.getArg("normalize_obvs").strip().lower() == 'true')
         self.EFE_bound = 1.0
         self.max_R_ti = 1.0
         self.min_R_ti = 0.01 #-1.0 for GLL #0.01
@@ -83,6 +84,13 @@ class QAIModel:
         self.efe_target.set_weights(self.efe, tau=self.tau)
 
     def act(self, o_t):
+        if self.normalize_obvs:
+            o_t = tf.clip_by_value(o_t, -self.obv_clip, self.obv_clip)
+            a = -self.obv_bound
+            b = self.obv_bound
+            self.max_obv = tf.math.maximum(self.max_obv, tf.math.reduce_max(o_t))
+            self.min_obv = tf.math.minimum(self.min_obv, tf.math.reduce_min(o_t))
+            o_t = (o_t - self.min_obv) * (b - a) / (self.max_obv - self.min_obv) + a
         if tf.random.uniform(shape=()) > self.epsilon:
             # run EFE model given state at time t
             efe_t, _, _ = self.efe.predict(o_t)
@@ -96,7 +104,7 @@ class QAIModel:
         pass
 
     def train_step(self, obv_t, obv_next, action, done, weights=None, reward=None):
-        if self.normalize_signals:
+        if self.normalize_obvs:
             obv_t = tf.clip_by_value(obv_t, -self.obv_clip, self.obv_clip)
             obv_next = tf.clip_by_value(obv_next, -self.obv_clip, self.obv_clip)
             a = -self.obv_bound
