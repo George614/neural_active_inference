@@ -113,6 +113,7 @@ class InterceptionEnv(gym.Env):
     def step_old(self, action):
         assert self.action_space.contains(
             action), "%r (%s) invalid" % (action, type(action))
+        self.action = action
         target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.state
 
         self.time += 1.0 / self.FPS
@@ -145,6 +146,7 @@ class InterceptionEnv(gym.Env):
     def step(self, action):
         assert self.action_space.contains(
             action), "%r (%s) invalid" % (action, type(action))
+        self.action = action
         target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.info
 
         self.time += 1.0 / self.FPS
@@ -195,6 +197,7 @@ class InterceptionEnv(gym.Env):
         has_changed_speed = 0
         self.state = np.asarray([self.target_init_distance, self.target_init_speed,
                                  has_changed_speed, subject_init_distance, subject_init_speed], dtype=np.float32)
+        self.action = None
         return np.array(self.state)
 
 
@@ -216,6 +219,7 @@ class InterceptionEnv(gym.Env):
                                  has_changed_speed, subject_init_distance, subject_init_speed], dtype=np.float32)
         estimated_speed = subject_init_distance / (self.target_init_distance / self.target_init_speed)
         self.state = subject_init_speed - estimated_speed
+        self.action = None
         return np.asarray([self.state], dtype=np.float32)
 
 
@@ -224,6 +228,7 @@ class InterceptionEnv(gym.Env):
             target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.state
         elif self.action_type == 'acceleration':
             target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.info
+            speed_diff = self.state
         # scale = (1 / (self.intercept_threshold / 2)) * 4
 
         screen_width = 1000
@@ -285,14 +290,14 @@ class InterceptionEnv(gym.Env):
             # Create the state display
             info_top = screen_height
             self.target_distance_label = text_rendering.Text(
-                'Target Distance: ' + str(target_dis))
+                'Target Distance: %.2f' % target_dis)
             info_top -= self.target_distance_label.text.content_height
             self.target_distance_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
             self.viewer.add_geom(self.target_distance_label)
 
             self.target_speed_label = text_rendering.Text(
-                'Target Speed: ' + str(target_speed))
+                'Target Speed: %.2f' % target_speed)
             info_top -= self.target_speed_label.text.content_height
             self.target_speed_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
@@ -306,32 +311,52 @@ class InterceptionEnv(gym.Env):
             self.viewer.add_geom(self.has_changed_speed_label)
 
             self.subject_dis_label = text_rendering.Text(
-                'Subject Distance: ' + str(subject_dis))
+                'Subject Distance: %.2f' % subject_dis)
             info_top -= self.subject_dis_label.text.content_height
             self.subject_dis_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
             self.viewer.add_geom(self.subject_dis_label)
 
             self.subject_speed_label = text_rendering.Text(
-                'Subject Speed: ' + str(subject_speed))
+                'Subject Speed: %.2f' % subject_speed)
             info_top -= self.subject_speed_label.text.content_height
             self.subject_speed_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
             self.viewer.add_geom(self.subject_speed_label)
+
+            if self.action_type == 'acceleration':
+                self.speed_diff_label = text_rendering.Text(
+                    'Speed difference: %.2f' % speed_diff)
+                info_top -= self.speed_diff_label.text.content_height
+                self.speed_diff_label.add_attr(
+                    rendering.Transform(translation=(5, info_top)))
+                self.viewer.add_geom(self.speed_diff_label)
+
+            self.action_label = text_rendering.Text(
+                'Action: ' + str(self.action))
+            info_top -= self.action_label.text.content_height
+            self.action_label.add_attr(
+                rendering.Transform(translation=(5, info_top)))
+            self.viewer.add_geom(self.action_label)
 
         # Update the state of the frame
         self.subject_trans.set_translation(-subject_dis * self.scale, 0)
         self.subject_rot.set_rotation(-self.approach_angle / 180 * math.pi)
         self.target_trans.set_translation(-target_dis * self.scale, 0)
         self.target_distance_label.set_text(
-            'Target Distance: ' + str(target_dis))
-        self.target_speed_label.set_text('Target Speed: ' + str(target_speed))
+            'Target Distance: %.2f' % target_dis)
+        self.target_speed_label.set_text('Target Speed: %.2f' % target_speed)
         self.has_changed_speed_label.set_text(
             'Has Changed Speed: ' + ('Yes' if has_changed_speed else 'No'))
         self.subject_dis_label.set_text(
-            'Subject Distance: ' + str(subject_dis))
+            'Subject Distance: %.2f' % subject_dis)
         self.subject_speed_label.set_text(
-            'Subject Speed: ' + str(subject_speed))
+            'Subject Speed: %.2f' % subject_speed)
+        self.action_label.set_text(
+            'Action: ' + str(self.action))
+        if self.action_type == 'acceleration':
+            self.speed_diff_label.set_text(
+                'Speed difference: %.2f' % speed_diff)
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
