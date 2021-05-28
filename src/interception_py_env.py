@@ -333,7 +333,7 @@ class InterceptionEnv(gym.Env):
                 self.viewer.add_geom(self.speed_diff_label)
 
             self.action_label = text_rendering.Text(
-                'Action: ' + str(self.action))
+                'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
             info_top -= self.action_label.text.content_height
             self.action_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
@@ -353,7 +353,7 @@ class InterceptionEnv(gym.Env):
         self.subject_speed_label.set_text(
             'Subject Speed: %.2f' % subject_speed)
         self.action_label.set_text(
-            'Action: ' + str(self.action))
+            'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
         if self.action_type == 'acceleration':
             self.speed_diff_label.set_text(
                 'Speed difference: %.2f' % speed_diff)
