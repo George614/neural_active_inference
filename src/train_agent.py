@@ -113,7 +113,7 @@ if expert_data_path is None:
 use_per_buffer = (args.getArg("use_per_buffer").strip().lower() == 'true')
 equal_replay_batches = (args.getArg("equal_replay_batches").strip().lower() == 'true')
 vae_reg = False
-epistemic_anneal = False
+epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
 seed = 44
 # epsilon exponential decay schedule
 epsilon_start = float(args.getArg("epsilon_start")) #0.025 #0.9
@@ -126,10 +126,10 @@ gamma_final = 0.99
 gamma_ep_duration = 300
 gamma_by_episode = Linear_schedule(gamma_start, gamma_final, gamma_ep_duration)
 # rho linear schedule for annealing epistemic term
-anneal_start_reward = -180
+anneal_start_reward = 40
 rho_start = 1.0
-rho_final = 0.0
-rho_ep_duration = 300
+rho_final = 0.1
+rho_ep_duration = 100
 rho_by_episode = Linear_schedule(rho_start, rho_final, rho_ep_duration)
 # beta linear schedule for prioritized experience replay
 beta_start = 0.4
@@ -372,25 +372,31 @@ for trial in range(n_trials):
         print("episode {}, r.mu = {:.3f}  win.mu = {:.3f}".format(ep_idx+1, episode_reward, reward_window_mean))
         print("-----------------------------------------------------------------")
         if ep_idx % 50 == 0:
-            agent_fname = "{0}trial{1}".format(out_dir, trial)
-            print(" => Saving reward sequence to ",agent_fname)
-            np.save("{0}_R".format(agent_fname), np.array(global_reward))
+            rewards_fname = "{0}trial{1}".format(out_dir, trial)
+            print(" => Saving reward sequence to ", rewards_fname)
+            np.save("{0}_R".format(rewards_fname), np.array(global_reward))
+            agent_fname = "{0}trial_{1}_epd_{2}.agent".format(out_dir, trial, ep_idx)
+            save_object(pplModel, fname=agent_fname)
 
-        '''
         # annealing of the epistemic term based on the average test rewards
         if epistemic_anneal:
-            if not rho_anneal_start and mean_reward > anneal_start_reward:
+            if not rho_anneal_start and reward_window_mean > anneal_start_reward:
                 start_ep = ep_idx
                 rho_anneal_start = True
             if rho_anneal_start:
                 rho = rho_by_episode(ep_idx - start_ep)
                 pplModel.rho.assign(rho)
-        '''
+        
+        if reward_window_mean > 60:
+            agent_fname = "{0}trial_{1}_epd_{2}.agent".format(out_dir, trial, ep_idx)
+            save_object(pplModel, fname=agent_fname)
 
     env.close()
     agent_fname = "{0}trial{1}".format(out_dir, trial)
-    print(" => Saving reward sequence to ",agent_fname)
+    print("==> Saving reward sequence to ", agent_fname)
     np.save("{0}_R".format(agent_fname), np.array(global_reward))
+    print("==> Saving QAI model: {0}".format(agent_fname))
+    save_object(pplModel, fname="{0}.agent".format(agent_fname))
 
 plot_rewards = args.getArg("plot_rewards").strip().lower() == 'true'
 if plot_rewards:
