@@ -139,7 +139,7 @@ class QAIModel:
                         # clip the instrumental value
                         R_ti = tf.clip_by_value(R_ti, -50.0, 50.0)
                 elif self.instru_term == "prior_global":
-                    R_ti = mse(x_true=obv_next, x_pred=self.global_mu, keep_batch=True)
+                    R_ti = -1.0 * mse(x_true=o_next_tran_mu, x_pred=self.global_mu, keep_batch=True)
                     if self.normalize_signals is True:
                         a = -self.EFE_bound
                         b = self.EFE_bound
