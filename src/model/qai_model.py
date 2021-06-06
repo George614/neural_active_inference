@@ -170,20 +170,22 @@ class QAIModel:
                 R_t = R_ti + self.rho * R_te
 
             ## model reconstruction loss ##
-            loss_reconst = mse(x_true=obv_next, x_pred=o_next_tran_mu) #g_nll(obv_next, o_next_mu, o_next_std * o_next_std)
-            #print(o_next_tran_mu.numpy()[0,:])
-            #print(obv_next[0,:])
-            #print(loss_reconst)
+            loss_reconst = mse(x_true=obv_next, x_pred=o_next_tran_mu, keep_batch=True) #g_nll(obv_next, o_next_mu, o_next_std * o_next_std)
+            done = tf.cast(done, dtype=tf.float32)
+            loss_reconst *= (1 - done) # done samples contain invalid observations
+            loss_reconst = tf.math.reduce_mean(loss_reconst)
+
             # regularization for weights
             loss_l2 = 0.0
             if self.l2_reg > 0.0:
                 loss_l2 = (tf.add_n([tf.nn.l2_loss(var) for var in self.param_var if 'W' in var.name])) * self.l2_reg
             ## compute full loss ##
             loss_model = loss_reconst  + loss_l2
+            
+            done = tf.expand_dims(done, axis=1)
 
-            # take the old EFE values given action indices
-            done = tf.expand_dims(tf.cast(done, dtype=tf.float32),axis=1)
             if self.use_sum_q is True:
+                # take the old EFE values given action indices
                 efe_old = tf.math.reduce_sum(efe_t * action, axis=-1)
                 with tape.stop_recording():
                     # EFE values for next state, s_t+1 is from transition model instead of encoder
