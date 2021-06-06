@@ -128,7 +128,7 @@ class QAIModel:
                     o_prior_mu, o_prior_std, _ = self.prior.predict(obv_t)
                     # difference between preferred future and actual future, i.e. instrumental term
                     #R_ti = -1.0 * g_nll(obv_next, o_prior_mu, o_prior_std * o_prior_std, keep_batch=True)
-                    R_ti = mse(x_true=obv_next, x_pred=o_prior_mu, keep_batch=True)
+                    R_ti = -1.0 * mse(x_true=o_next_tran_mu, x_pred=o_prior_mu, keep_batch=True)
                     if self.normalize_signals is True:
                         a = -self.EFE_bound
                         b = self.EFE_bound
