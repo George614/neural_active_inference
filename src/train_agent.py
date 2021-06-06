@@ -88,6 +88,8 @@ else:
 
 n_trials = int(args.getArg("n_trials"))
 out_dir = args.getArg("out_dir") #"/home/agoroot/IdeaProjects/playful_learning/exp/mcar/act_inf1/"
+if not os.path.exists(out_dir):
+    os.makedirs(out_dir)
 prior_model_save_path = None
 if args.hasArg("prior_model_save_path"):
     prior_model_save_path = args.getArg("prior_model_save_path") #"/home/agoroot/IdeaProjects/playful_learning/exp/mcar/prior/prior.agent"
@@ -102,6 +104,7 @@ test_episodes = 5  # number of episodes for testing
 target_update_freq = 500  # in terms of steps
 target_update_ep = int(args.getArg("target_update_ep")) #2  # in terms of episodes
 buffer_size = int(args.getArg("buffer_size")) #200000 # 100000
+learning_start = int(args.getArg("learning_start"))
 prob_alpha = 0.6
 batch_size = int(args.getArg("batch_size")) #256
 grad_norm_clip = float(args.getArg("grad_norm_clip")) #1.0 #10.0
@@ -266,61 +269,61 @@ for trial in range(n_trials):
                         # sample from expert buffer only
                         batch_data = expert_buffer.sample(batch_size)
                 else:
-                    if len(replay_buffer) > batch_size:
+                    batch_data = None
+                    if len(replay_buffer) > learning_start:
                         batch_data = replay_buffer.sample(batch_size)
-                    else:
-                        batch_data = replay_buffer.sample(len(replay_buffer))
 
-                [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done] = batch_data
+                if batch_data is not None:
+                    [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done] = batch_data
+                    batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
+                    grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, reward=batch_reward)
 
-                batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
-                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, reward=batch_reward)
+            if batch_data is not None:
+                if tf.math.is_nan(loss_efe):
+                    print("loss_efe nan at frame #", frame_idx)
+                    break
 
-            if tf.math.is_nan(loss_efe):
-                print("loss_efe nan at frame #", frame_idx)
-                break
+                ### clip gradients  ###
+                crash = False
+                grads_model_clipped = []
+                for grad in grads_model:
+                    if grad is not None:
+                        if clip_type == "hard_clip":
+                            grad = tf.clip_by_value(grad, -grad_norm_clip, grad_norm_clip)
+                        else:
+                            grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
+                        if tf.math.reduce_any(tf.math.is_nan(grad)):
+                            print("grad_model nan at frame # ", frame_idx)
+                            crash = True
+                    grads_model_clipped.append(grad)
 
-            ### clip gradients  ###
-            crash = False
-            grads_model_clipped = []
-            for grad in grads_model:
-                if grad is not None:
-                    if clip_type == "hard_clip":
-                        grad = tf.clip_by_value(grad, -grad_norm_clip, grad_norm_clip)
-                    else:
-                        grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
-                    if tf.math.reduce_any(tf.math.is_nan(grad)):
-                        print("grad_model nan at frame # ", frame_idx)
-                        crash = True
-                grads_model_clipped.append(grad)
+                grads_efe_clipped = []
+                for grad in grads_efe:
+                    if grad is not None:
+                        if clip_type == "hard_clip":
+                            grad = tf.clip_by_value(grad, -grad_norm_clip, grad_norm_clip)
+                        else:
+                            grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
+                        if tf.math.reduce_any(tf.math.is_nan(grad)):
+                            print("grad_efe nan at frame # ", frame_idx)
+                            crash = True
+                    grads_efe_clipped.append(grad)
 
-            grads_efe_clipped = []
-            for grad in grads_efe:
-                if grad is not None:
-                    if clip_type == "hard_clip":
-                        grad = tf.clip_by_value(grad, -grad_norm_clip, grad_norm_clip)
-                    else:
-                        grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
-                    if tf.math.reduce_any(tf.math.is_nan(grad)):
-                        print("grad_efe nan at frame # ", frame_idx)
-                        crash = True
-                grads_efe_clipped.append(grad)
+                if crash:
+                    break
 
-            if crash:
-                break
+                ### Gradient descend by Adam optimizer excluding variables with no gradients ###
+                opt.apply_gradients(zip(grads_model_clipped, pplModel.param_var))
+                opt.apply_gradients(zip(grads_efe_clipped, pplModel.param_var))
+                if learning_rate_decay > 0.0:
+                    lower_bound_lr = 1e-7
+                    lr.assign(max(lower_bound_lr, float(lr * learning_rate_decay)))
 
-            ### Gradient descend by Adam optimizer excluding variables with no gradients ###
-            opt.apply_gradients(zip(grads_model_clipped, pplModel.param_var))
-            opt.apply_gradients(zip(grads_efe_clipped, pplModel.param_var))
-            if learning_rate_decay > 0.0:
-                lower_bound_lr = 1e-7
-                lr.assign(max(lower_bound_lr, float(lr * learning_rate_decay)))
+                # if frame_idx % target_update_freq == 0:
+                #     pplModel.update_target()
 
-            # if frame_idx % target_update_freq == 0:
-            #     pplModel.update_target()
-
-            #if frame_idx % 200 == 0:
-            #    print("frame {}, loss_model {:.3f}, loss_efe {:.3f}".format(frame_idx, loss_model.numpy(), loss_efe.numpy()))
+                #if frame_idx % 200 == 0:
+                #    print("frame {}, loss_model {:.3f}, loss_efe {:.3f}".format(frame_idx, loss_model.numpy(), loss_efe.numpy()))
 
         pplModel.clear_state()
         if ep_idx % target_update_ep == 0:
@@ -329,13 +332,10 @@ for trial in range(n_trials):
         ### after each training episode is done ###
         observation = env.reset()
 
-        print("-----------------------------------------------------------------")
-        '''
-        print("frame {}, L.model = {:.3f}, L.efe = {:.3f}  eps = {:.3f}".format(frame_idx, loss_model.numpy(),
-              (loss_efe/efe_N).numpy(),float(pplModel.epsilon.numpy())))
-        '''
-        print("frame {0}, L.model = {1}, L.efe = {2}  eps = {3}".format(frame_idx, loss_model.numpy(),
-              (loss_efe/efe_N).numpy(),float(pplModel.epsilon.numpy())))
+        if batch_data is not None:
+            print("-----------------------------------------------------------------")
+            print("frame {0}, L.model = {1}, L.efe = {2}  eps = {3}".format(frame_idx, loss_model.numpy(),
+                  (loss_efe/efe_N).numpy(), pplModel.epsilon.numpy()))
         ### evaluate the PPL model using a number of episodes ###
         if eval_model is True:
             #pplModel.rho.assign(0.0)
