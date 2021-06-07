@@ -180,7 +180,7 @@ class QAIModel:
             if self.l2_reg > 0.0:
                 loss_l2 = (tf.add_n([tf.nn.l2_loss(var) for var in self.param_var if 'W' in var.name])) * self.l2_reg
             ## compute full loss ##
-            loss_model = loss_reconst  + loss_l2
+            loss_model = loss_reconst + loss_l2
             
             done = tf.expand_dims(done, axis=1)
 
@@ -211,9 +211,9 @@ class QAIModel:
                     loss_efe_batch = huber(x_true=y_j, x_pred=efe_old, keep_batch=True)
                 else:
                     loss_efe_batch = mse(x_true=y_j, x_pred=efe_old, keep_batch=True)
+                priorities = tf.math.abs(loss_efe_batch) + 1e-5
                 loss_efe_batch = tf.squeeze(loss_efe_batch)
                 loss_efe_batch *= weights
-                priorities = loss_efe_batch + 1e-5
                 loss_efe = tf.math.reduce_mean(loss_efe_batch)
             else:
                 if self.efe_loss == "huber":
