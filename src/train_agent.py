@@ -113,10 +113,11 @@ log_interval = 4
 keep_expert_batch = True
 if expert_data_path is None:
     keep_expert_batch = False
-use_per_buffer = (args.getArg("use_per_buffer").strip().lower() == 'true')
+use_per_buffer = args.getArg("use_per_buffer").strip().lower() == 'true'
 equal_replay_batches = (args.getArg("equal_replay_batches").strip().lower() == 'true')
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
+use_env_prior = args.getArg("env_prior").strip().lower() == 'true'
 seed = 44
 # epsilon exponential decay schedule
 epsilon_start = float(args.getArg("epsilon_start")) #0.025 #0.9
@@ -147,13 +148,13 @@ learning_rate_decay = float(args.getArg("learning_rate_decay"))
 opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
 
 if use_per_buffer:
-    per_buffer = NaivePrioritizedBuffer(buffer_size * 2, prob_alpha=prob_alpha)
+    per_buffer = NaivePrioritizedBuffer(buffer_size, prob_alpha=prob_alpha)
 else:
     expert_buffer = ReplayBuffer(buffer_size, seed=seed)
     replay_buffer = ReplayBuffer(buffer_size, seed=seed)
 
 # env = gym.make(args.getArg("env_name"))
-env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=0)
+env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=0, return_prior=use_env_prior)
 # set seeds
 tf.random.set_seed(seed)
 np.random.seed(seed)
@@ -224,7 +225,7 @@ for trial in range(n_trials):
         while not done:
             frame_idx += 1
             epsilon = epsilon_by_frame(frame_idx)
-            epsilon = 0.0
+            # epsilon = 0.0
             pplModel.epsilon.assign(epsilon)
 
             obv = tf.convert_to_tensor(observation, dtype=tf.float32)
@@ -233,21 +234,36 @@ for trial in range(n_trials):
             action = pplModel.act(obv)
             action = action.numpy().squeeze()
 
-            next_obv, reward, done, _ = env.step(action)
+            if use_env_prior:
+                next_obv, reward, done, obv_prior, _ = env.step(action)
+            else:
+                next_obv, reward, done, _ = env.step(action)
             episode_reward += reward
 
             efe_N = 1.0
             if use_per_buffer is True:
-                per_buffer.push(observation, action, reward, next_obv, done)
+                if use_env_prior:
+                    per_buffer.push(observation, action, reward, next_obv, done, obv_prior)
+                else:
+                    per_buffer.push(observation, action, reward, next_obv, done)
                 observation = next_obv
                 batch_data = per_buffer.sample(batch_size, beta=beta)
                 efe_N = batch_size * 1.0
-                [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_indices, batch_weights] = batch_data
+                if use_env_prior:
+                    [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior, batch_indices, batch_weights] = batch_data
+                else:
+                    [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_indices, batch_weights] = batch_data
                 batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
-                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, reward=batch_reward)
+                if use_env_prior:
+                    grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, obv_prior=batch_prior)
+                else:
+                    grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, reward=batch_reward)
                 per_buffer.update_priorities(batch_indices, priorities.numpy())
             else:
-                replay_buffer.push(observation, action, reward, next_obv, done)
+                if use_env_prior:
+                    replay_buffer.push(observation, action, reward, next_obv, done, obv_prior)
+                else:
+                    replay_buffer.push(observation, action, reward, next_obv, done)
                 observation = next_obv
 
                 if keep_expert_batch:
@@ -274,9 +290,14 @@ for trial in range(n_trials):
                         batch_data = replay_buffer.sample(batch_size)
 
                 if batch_data is not None:
-                    [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done] = batch_data
-                    batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
-                    grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, reward=batch_reward)
+                    if use_env_prior:
+                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior] = batch_data
+                        batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
+                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, obv_prior=batch_prior)
+                    else:
+                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done] = batch_data
+                        batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
+                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, reward=batch_reward)
 
             if batch_data is not None:
                 if tf.math.is_nan(loss_efe):
