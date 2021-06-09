@@ -103,7 +103,7 @@ class QAIModel:
     def clear_state(self):
         pass
 
-    def train_step(self, obv_t, obv_next, action, done, weights=None, reward=None):
+    def train_step(self, obv_t, obv_next, action, done, weights=None, reward=None, obv_prior=None):
         if self.normalize_obvs:
             obv_t = tf.clip_by_value(obv_t, -self.obv_clip, self.obv_clip)
             obv_next = tf.clip_by_value(obv_next, -self.obv_clip, self.obv_clip)
@@ -125,10 +125,13 @@ class QAIModel:
                 ### instrumental term ###
                 R_ti = None
                 if self.instru_term == "prior_local":
-                    o_prior_mu, o_prior_std, _ = self.prior.predict(obv_t)
-                    # difference between preferred future and actual future, i.e. instrumental term
-                    #R_ti = -1.0 * g_nll(obv_next, o_prior_mu, o_prior_std * o_prior_std, keep_batch=True)
-                    R_ti = -1.0 * mse(x_true=o_next_tran_mu, x_pred=o_prior_mu, keep_batch=True)
+                    if obv_prior is None:
+                        o_prior_mu, o_prior_std, _ = self.prior.predict(obv_t)
+                        # difference between preferred future and actual future, i.e. instrumental term
+                        #R_ti = -1.0 * g_nll(obv_next, o_prior_mu, o_prior_std * o_prior_std, keep_batch=True)
+                        R_ti = -1.0 * mse(x_true=o_next_tran_mu, x_pred=o_prior_mu, keep_batch=True)
+                    else:
+                        R_ti = -1.0 * mse(x_true=o_next_tran_mu, x_pred=obv_prior, keep_batch=True)
                     if self.normalize_signals is True:
                         a = -self.EFE_bound
                         b = self.EFE_bound
