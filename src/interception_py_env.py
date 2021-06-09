@@ -58,7 +58,7 @@ class InterceptionEnv(gym.Env):
          Episode length is greater than 6 seconds (180 steps @ 30FPS).
     '''
 
-    def __init__(self, target_speed_idx=0, approach_angle_idx=0):
+    def __init__(self, target_speed_idx=0, approach_angle_idx=0, return_prior=False):
         self.subject_min_position = 0.0
         self.subject_max_position = 30.0
         self.approach_angle_list = [135, 140, 145]
@@ -82,6 +82,7 @@ class InterceptionEnv(gym.Env):
         self.FPS = 60
         self.viewer = None
         self.action_type = 'acceleration'  # or 'speed'
+        self.return_prior = return_prior
 
         if self.action_type == 'speed':
             # instantaneous speed change
@@ -127,7 +128,7 @@ class InterceptionEnv(gym.Env):
 
         # TODO add the lagging effect to subject speed
         subject_speed = self.action_speed_mappings[action]
-        # subject_speed += (subject_speed - self.action_speed_mappings[action]) * self.lag_coefficient
+        subject_speed += (self.action_speed_mappings[action] - subject_speed) * self.lag_coefficient
         subject_dis -= subject_speed / self.FPS
         target_dis -= target_speed / self.FPS
         target_subject_dis = np.sqrt(np.square(target_dis) + np.square(
@@ -147,7 +148,11 @@ class InterceptionEnv(gym.Env):
         assert self.action_space.contains(
             action), "%r (%s) invalid" % (action, type(action))
         self.action = action
-        target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.info
+        if self.return_prior:
+            target_dis, target_speed, has_changed_speed, subject_dis, estimated_speed = self.info
+            subject_speed = self.state
+        else:
+            target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.info
 
         self.time += 1.0 / self.FPS
         if self.time >= self.time_to_change_speed and not has_changed_speed:
@@ -170,13 +175,17 @@ class InterceptionEnv(gym.Env):
         )
         reward = 100 if target_subject_dis <= self.intercept_threshold else 0
 
-        self.info = (target_dis, target_speed,
-                      has_changed_speed, subject_dis, subject_speed)
-
         estimated_speed = subject_dis / (target_dis / target_speed)
-        self.state = subject_speed - estimated_speed
-
-        return np.asarray([self.state], dtype=np.float32), reward, done, self.info
+        if self.return_prior:
+            self.state = subject_speed
+            self.info = (target_dis, target_speed,
+                      has_changed_speed, subject_dis, estimated_speed)
+            return np.asarray([self.state], dtype=np.float32), reward, done, estimated_speed, self.info
+        else:
+            self.info = (target_dis, target_speed,
+                      has_changed_speed, subject_dis, subject_speed)
+            self.state = subject_speed - estimated_speed
+            return np.asarray([self.state], dtype=np.float32), reward, done, self.info
 
 
     def reset_old(self, target_speed_idx=0, approach_angle_idx=0):
@@ -218,8 +227,12 @@ class InterceptionEnv(gym.Env):
         self.info = np.asarray([self.target_init_distance, self.target_init_speed,
                                  has_changed_speed, subject_init_distance, subject_init_speed], dtype=np.float32)
         estimated_speed = subject_init_distance / (self.target_init_distance / self.target_init_speed)
-        self.state = subject_init_speed - estimated_speed
         self.action = None
+        if self.return_prior:
+            self.state = subject_init_speed
+        else:
+            self.state = subject_init_speed - estimated_speed
+        
         return np.asarray([self.state], dtype=np.float32)
 
 
@@ -227,8 +240,13 @@ class InterceptionEnv(gym.Env):
         if self.action_type == 'speed':
             target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.state
         elif self.action_type == 'acceleration':
-            target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.info
-            speed_diff = self.state
+            if self.return_prior:
+                target_dis, target_speed, has_changed_speed, subject_dis, estimated_speed = self.info
+                subject_speed = self.state
+                speed_diff = subject_speed - estimated_speed
+            else:
+                target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.info
+                speed_diff = self.state
         # scale = (1 / (self.intercept_threshold / 2)) * 4
 
         screen_width = 1000
