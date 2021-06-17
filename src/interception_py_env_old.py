@@ -58,7 +58,7 @@ class InterceptionEnv(gym.Env):
          Episode length is greater than 6 seconds (180 steps @ 30FPS).
     '''
 
-    def __init__(self, target_speed_idx=0, approach_angle_idx=3, return_prior=False):
+    def __init__(self, target_speed_idx=0, approach_angle_idx=0, return_prior=False):
         self.subject_min_position = 0.0
         self.subject_max_position = 30.0
         self.approach_angle_list = [135, 140, 145, 90]
@@ -94,10 +94,10 @@ class InterceptionEnv(gym.Env):
         elif self.action_type == 'acceleration':
             # accelerate / decelerate / none
             self.action_space = spaces.Discrete(5)
-            self.action_acceleration_mappings = [0.2, 0.05, 0.0, -0.05, -0.2]
-            self.low = np.array([0.0, np.min(self.target_init_speed_list), 0.0, 0.0], dtype=np.float32)
-            self.high = np.array([self.target_init_distance, self.target_max_speed,
-                                  self.subject_max_position, self.subject_speed_max], dtype=np.float32)
+            self.action_acceleration_mappings = [0.05, 0.2, -0.05, -0.2, 0.0]
+            self.action_perfect_acc_map = ["accelerate", "none", "decelerate"]
+            self.low = np.array([-self.subject_speed_max], dtype=np.float32)
+            self.high = np.array([self.subject_speed_max], dtype=np.float32)
         else:
             raise Exception("Action type {} is not valid!".format(self.action_type))
 
@@ -112,12 +112,11 @@ class InterceptionEnv(gym.Env):
         return [seed]
 
 
-    def step(self, action):
+    def step_old(self, action):
         assert self.action_space.contains(
             action), "%r (%s) invalid" % (action, type(action))
         self.action = action
-        target_dis, target_speed, subject_dis, subject_speed = self.state
-        has_changed_speed, _ = self.info
+        target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.state
 
         self.time += 1.0 / self.FPS
         if self.time >= self.time_to_change_speed and not has_changed_speed:
@@ -128,25 +127,94 @@ class InterceptionEnv(gym.Env):
             target_speed = min(self.target_final_speed, speed_proportion * (
                 self.target_final_speed - self.target_init_speed) + self.target_init_speed)
 
-        estimated_speed = subject_dis / (target_dis / target_speed)
-        subject_speed += self.action_acceleration_mappings[action]
-        subject_speed = np.clip(subject_speed, 0, self.subject_speed_max)
+        # TODO add the lagging effect to subject speed
+        subject_speed = self.action_speed_mappings[action]
+        subject_speed += (self.action_speed_mappings[action] - subject_speed) * self.lag_coefficient
         subject_dis -= subject_speed / self.FPS
-        subject_dis = np.clip(subject_dis, 0, self.subject_max_position)
         target_dis -= target_speed / self.FPS
-
         target_subject_dis = np.sqrt(np.square(target_dis) + np.square(
             subject_dis) - 2 * target_dis * subject_dis * np.cos(self.approach_angle * np.pi / 180))
 
         done = bool(
             subject_dis <= 0 or target_dis <= 0 or target_subject_dis <= self.intercept_threshold
         )
-        reward = 35 if target_subject_dis <= self.intercept_threshold else -0.1
+        reward = 100 if target_subject_dis <= self.intercept_threshold else 0
 
-        self.state = (target_dis, target_speed, subject_dis, subject_speed)
-        self.info = (has_changed_speed, estimated_speed)
+        self.state = (target_dis, target_speed,
+                      has_changed_speed, subject_dis, subject_speed)
+        return np.array(self.state), reward, done, {}
+
+
+    def step(self, action):
+        assert self.action_space.contains(
+            action), "%r (%s) invalid" % (action, type(action))
+        self.action = action
+        if self.return_prior:
+            target_dis, target_speed, has_changed_speed, subject_dis, estimated_speed = self.info
+            subject_speed, _ = self.state
+        else:
+            target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.info
+
+        self.time += 1.0 / self.FPS
+        if self.time >= self.time_to_change_speed and not has_changed_speed:
+            has_changed_speed = 1
+        if has_changed_speed:
+            speed_proportion = (
+                self.time - self.time_to_change_speed) / self.speed_change_duration
+            target_speed = min(self.target_final_speed, speed_proportion * (
+                self.target_final_speed - self.target_init_speed) + self.target_init_speed)
+
+        # TODO add the lagging effect to subject speed
+        estimated_speed = subject_dis / (target_dis / target_speed)
+        # subject_speed += self.action_acceleration_mappings[action]
+        if action == 0:
+            subject_speed = estimated_speed
+        elif action == 2:
+            error = subject_speed - estimated_speed
+            subject_speed += error
+        subject_dis -= subject_speed / self.FPS
+        target_dis -= target_speed / self.FPS
+        target_subject_dis = np.sqrt(np.square(target_dis) + np.square(
+            subject_dis) - 2 * target_dis * subject_dis * np.cos(self.approach_angle * np.pi / 180))
+
+        done = bool(
+            subject_dis <= 0 or target_dis <= 0 or target_subject_dis <= self.intercept_threshold
+        )
+        reward = 100 if target_subject_dis <= self.intercept_threshold else 0
         
-        return np.asarray(self.state, dtype=np.float32), reward, done, self.info
+        if self.return_prior:
+            self.state = [subject_speed, target_subject_dis]
+            self.info = (target_dis, target_speed,
+                      has_changed_speed, subject_dis, estimated_speed)
+            prior = np.asarray([estimated_speed, 0], dtype=np.float32)
+            return np.asarray(self.state, dtype=np.float32), reward, done, prior, self.info
+        else:
+            self.info = (target_dis, target_speed,
+                      has_changed_speed, subject_dis, subject_speed)
+            self.state = [subject_speed - estimated_speed]
+            return np.asarray(self.state, dtype=np.float32), reward, done, self.info
+
+
+    def reset_old(self, target_speed_idx=0, approach_angle_idx=0):
+        self.time_to_change_speed = self.np_random.uniform(
+            low=self.time_to_change_speed_min, high=self.time_to_change_speed_max)
+        self.approach_angle = self.approach_angle_list[approach_angle_idx]
+        self.target_init_speed = self.target_init_speed_list[target_speed_idx]
+        self.target_final_speed = np.clip(
+            self.np_random.normal(
+                loc=self.target_fspeed_mean, scale=self.target_fspeed_std),
+            self.target_min_speed,
+            self.target_max_speed
+        )
+        self.time = 0.0
+        subject_init_distance = self.np_random.uniform(
+            low=self.subject_init_distance_min, high=self.subject_init_distance_max)
+        subject_init_speed = 0.0
+        has_changed_speed = 0
+        self.state = np.asarray([self.target_init_distance, self.target_init_speed,
+                                 has_changed_speed, subject_init_distance, subject_init_speed], dtype=np.float32)
+        self.action = None
+        return np.array(self.state)
 
 
     def reset(self):
@@ -163,12 +231,16 @@ class InterceptionEnv(gym.Env):
             low=self.subject_init_distance_min, high=self.subject_init_distance_max)
         subject_init_speed = 0.0
         has_changed_speed = 0
+        self.info = np.asarray([self.target_init_distance, self.target_init_speed,
+                                 has_changed_speed, subject_init_distance, subject_init_speed], dtype=np.float32)
         estimated_speed = subject_init_distance / (self.target_init_distance / self.target_init_speed)
         target_subject_dis = np.sqrt(np.square(self.target_init_distance) + np.square(
             subject_init_distance) - 2 * self.target_init_distance * subject_init_distance * np.cos(self.approach_angle * np.pi / 180))
         self.action = None
-        self.info = (has_changed_speed, estimated_speed)
-        self.state = [self.target_init_distance, self.target_init_speed, subject_init_distance, subject_init_speed]
+        if self.return_prior:
+            self.state = [subject_init_speed, target_subject_dis]
+        else:
+            self.state = [subject_init_speed - estimated_speed]
         
         return np.asarray(self.state, dtype=np.float32)
 
@@ -177,9 +249,13 @@ class InterceptionEnv(gym.Env):
         if self.action_type == 'speed':
             target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.state
         elif self.action_type == 'acceleration':
-            target_dis, target_speed, subject_dis, subject_speed = self.state
-            has_changed_speed, estimated_speed = self.info
-            speed_diff = subject_speed - estimated_speed
+            if self.return_prior:
+                target_dis, target_speed, has_changed_speed, subject_dis, estimated_speed = self.info
+                subject_speed, _ = self.state
+                speed_diff = subject_speed - estimated_speed
+            else:
+                target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.info
+                speed_diff = self.state[0]
         # scale = (1 / (self.intercept_threshold / 2)) * 4
 
         screen_width = 1000
@@ -284,7 +360,7 @@ class InterceptionEnv(gym.Env):
                 self.viewer.add_geom(self.speed_diff_label)
 
             self.action_label = text_rendering.Text(
-                'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
+                'Action (acceleration): ' + str(self.action_perfect_acc_map[self.action]))
             info_top -= self.action_label.text.content_height
             self.action_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
@@ -304,7 +380,7 @@ class InterceptionEnv(gym.Env):
         self.subject_speed_label.set_text(
             'Subject Speed: %.2f' % subject_speed)
         self.action_label.set_text(
-            'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
+            'Action (acceleration): ' + str(self.action_perfect_acc_map[self.action]))
         if self.action_type == 'acceleration':
             self.speed_diff_label.set_text(
                 'Speed difference: %.2f' % speed_diff)
@@ -324,12 +400,13 @@ class InterceptionEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    test = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3)
+    test = InterceptionEnv(target_speed_idx=2, approach_angle_idx=0)
     test.reset()
     frame_duration = 1 / test.FPS
-    # test.render()
+
+    test.render()
     prev_time = time.time()
-    while not test.step(1)[2]:
+    while not test.step(0)[2]:
         time.sleep(max(frame_duration - (time.time() - prev_time), 0))
         prev_time = time.time()
         test.render()
