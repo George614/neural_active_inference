@@ -37,7 +37,7 @@ class QAIModel:
         self.min_R_ti = 0.01 #-1.0 for GLL #0.01
         self.max_R_te = 1.0
         self.min_R_te = 0.01 #-1.0 for GLL #0.01
-        self.obv_clip = 40.0
+        self.obv_clip = 20.0
         self.obv_bound = 1.0
         self.max_obv = 1.0
         self.min_obv = -1.0
@@ -113,6 +113,11 @@ class QAIModel:
             self.max_obv = tf.math.maximum(self.max_obv, tf.math.reduce_max(obv_next))
             self.min_obv = tf.math.minimum(self.min_obv, tf.math.reduce_min(obv_t))
             self.min_obv = tf.math.minimum(self.min_obv, tf.math.reduce_min(obv_next))
+            if obv_prior is not None:
+                obv_prior = tf.clip_by_value(obv_prior, -self.obv_clip, self.obv_clip)
+                self.max_obv = tf.math.maximum(self.max_obv, tf.math.reduce_max(obv_prior))
+                self.min_obv = tf.math.minimum(self.min_obv, tf.math.reduce_min(obv_prior))
+                obv_prior = (obv_prior - self.min_obv) * (b - a) / (self.max_obv - self.min_obv) + a
             obv_t = (obv_t - self.min_obv) * (b - a) / (self.max_obv - self.min_obv) + a
             obv_next = (obv_next - self.min_obv) * (b - a) / (self.max_obv - self.min_obv) + a
         with tf.GradientTape(persistent=True) as tape:
