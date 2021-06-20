@@ -432,7 +432,7 @@ if plot_rewards:
         line = plt.plot(np.arange(len(rewards)), rewards, linewidth=1)
         plt.xlabel("Episodes")
         plt.ylabel("Rewards")
-        fig.savefig(str(result_dir)+"\\trial_{}.png".format(i), dpi=200)
+        fig.savefig(str(result_dir)+"/trial_{}.png".format(i), dpi=200)
     reward_list = np.asarray(reward_list)
     mean_rewards = np.mean(reward_list, axis=0)
     std_rewards = np.std(reward_list, axis=0)
@@ -443,5 +443,5 @@ if plot_rewards:
     ax.set_ylabel("Rewards")
     ax.set_xlabel("Number of episodes")
     ax.set_title("Episode rewards")
-    fig.savefig(str(result_dir) + "\\mean_rewards.png", dpi=200)
+    fig.savefig(str(result_dir) + "/mean_rewards.png", dpi=200)
     
