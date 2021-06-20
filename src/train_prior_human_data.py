@@ -23,6 +23,7 @@ def eval_model(model, test_set, mem_batch_size):
         -log p(z_t+1|z_t)
     """
     L = 0.0
+    dim_obv = np.shape(test_set)[1]
     for s_ptr in range(0, len(test_set), mem_batch_size):
         e_ptr = s_ptr + mem_batch_size
         if e_ptr >= len(test_set):
@@ -30,7 +31,7 @@ def eval_model(model, test_set, mem_batch_size):
         o_t_batch = []
         o_tp1_batch = []
         for s in range(s_ptr, e_ptr):
-            o_t, o_tp1 = test_set[s, 0:1], test_set[s, 1:]
+            o_t, o_tp1 = test_set[s, 0:dim_obv], test_set[s, dim_obv:]
             o_t_batch.append(o_t)
             o_tp1_batch.append(o_tp1)
         o_t = tf.cast(np.array(o_t_batch), dtype=tf.float32)
@@ -106,6 +107,17 @@ use_log_form = (args.getArg("use_log_form").strip().lower() == 'true')
 # set up data and prior model
 ################################################################################
 all_data = np.load(data_fname)
+if obs_dim == 4:
+    # data components: (target_dis, target_speed, subject_dis, subject_speed)
+    # scale the data to (-1, 1)
+    all_data[:, 0] = 2 * (all_data[:, 0] / 45 - 0.5)
+    all_data[:, 4] = 2 * (all_data[:, 4] / 45 - 0.5)
+    all_data[:, 1] = 2 * (all_data[:, 1] / 20 - 0.5)
+    all_data[:, 5] = 2 * (all_data[:, 5] / 20 - 0.5)
+    all_data[:, 2] = 2 * (all_data[:, 2] / 30 - 0.5)
+    all_data[:, 6] = 2 * (all_data[:, 6] / 30 - 0.5)
+    all_data[:, 3] = 2 * (all_data[:, 3] / 14 - 0.5)
+    all_data[:, 7] = 2 * (all_data[:, 7] / 14 - 0.5)
 n_test_samples = int(np.floor(len(all_data) * 0.3))
 testset = all_data[:n_test_samples, :]
 trainset = all_data[n_test_samples:, :]
@@ -148,7 +160,7 @@ for it in range(num_iter):
         o_tp1_batch = []
         for s in range(s_ptr, e_ptr):
             ptr = int(ptrs[s])
-            o_t, o_tp1 = trainset[ptr, 0:1], trainset[ptr, 1:]
+            o_t, o_tp1 = trainset[ptr, 0:obs_dim], trainset[ptr, obs_dim:]
             o_t_batch.append(o_t)
             o_tp1_batch.append(o_tp1)
         o_t = tf.cast(np.array(o_t_batch), dtype=tf.float32)
@@ -162,7 +174,8 @@ for it in range(num_iter):
                 else:
                     L_prior = g_nll(o_tp1, o_mu, o_sigma * o_sigma)
             else:
-                L_prior = g_nll(o_tp1, o_mu, o_sigma * 0 + 1.0)
+                # L_prior = g_nll(o_tp1, o_mu, o_sigma * 0 + 1.0) #TODO try MSE
+                L_prior = mse(o_tp1, o_mu)
             if l2_reg > 0.0:
                 loss_l2 = (tf.add_n([tf.nn.l2_loss(var) for var in prior.param_var if 'W' in var.name])) * l2_reg
                 L_prior = L_prior + loss_l2
