@@ -77,11 +77,11 @@ class InterceptionEnv(gym.Env):
         self.target_fspeed_mean = 15.0
         self.target_fspeed_std = 5.0
         self.target_min_speed = 10.0
-        self.lag_coefficient = 0.017
         # FPS is set to match the frame rate of human subject experiments
         self.FPS = 60
+        self.lag_coefficient = float(1.0 / self.FPS)
         self.viewer = None
-        self.action_type = 'acceleration'  # or 'speed'
+        self.action_type = 'speed'  # 'acceleration' or 'speed'
         self.return_prior = return_prior
 
         if self.action_type == 'speed':
@@ -122,14 +122,38 @@ class InterceptionEnv(gym.Env):
         self.time += 1.0 / self.FPS
         if self.time >= self.time_to_change_speed and not has_changed_speed:
             has_changed_speed = 1
-        if has_changed_speed:
-            speed_proportion = (
-                self.time - self.time_to_change_speed) / self.speed_change_duration
-            target_speed = min(self.target_final_speed, speed_proportion * (
-                self.target_final_speed - self.target_init_speed) + self.target_init_speed)
+        # if has_changed_speed:
+        #     speed_proportion = (
+        #         self.time - self.time_to_change_speed) / self.speed_change_duration
+        #     target_speed = min(self.target_final_speed, speed_proportion * (
+        #         self.target_final_speed - self.target_init_speed) + self.target_init_speed)
 
         estimated_speed = subject_dis / (target_dis / target_speed)
-        subject_speed += self.action_acceleration_mappings[action]
+        if self.action_type == 'speed':
+            if self.return_prior:
+                prior_speed_diffs = []
+                for prior_action in range(self.action_space.n):
+                    pedal_speed_n = self.action_speed_mappings[prior_action]
+                    prior_sub_speed_n = subject_speed + (pedal_speed_n - subject_speed) * self.lag_coefficient
+                    prior_speed_diff = prior_sub_speed_n - estimated_speed
+                    prior_speed_diffs.append(np.abs(prior_speed_diff))
+                action_prior = np.argmin(prior_speed_diffs)  # using prior knowledge: speed_diff ~ N(0, sigma)
+                pedal_speed_prior = self.action_speed_mappings[action_prior]
+                prior_sub_speed = subject_speed + (pedal_speed_prior - subject_speed) * self.lag_coefficient
+                prior_sub_dis = subject_dis - prior_sub_speed / self.FPS
+                prior_target_dis = target_dis - target_speed / self.FPS
+                # prior_obv = (prior_target_dis, target_speed, prior_sub_dis, prior_sub_speed)
+                scaled_prior_target_dis = 2 * (prior_target_dis / self.target_init_distance - 0.5)
+                scaled_prior_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
+                scaled_prior_sub_dis = 2 * (prior_sub_dis / self.subject_max_position - 0.5)
+                scaled_prior_sub_speed = 2 * (prior_sub_speed / self.subject_speed_max - 0.5)
+                prior_scaled_obv = (scaled_prior_target_dis, scaled_prior_target_speed, scaled_prior_sub_dis, scaled_prior_sub_speed)
+                prior_scaled_obv = np.asarray(prior_scaled_obv, dtype=np.float32)
+            pedal_speed = self.action_speed_mappings[action]
+            subject_speed += (pedal_speed - subject_speed) * self.lag_coefficient
+        elif self.action_type == 'acceleration':
+            subject_speed += self.action_acceleration_mappings[action]
+        
         subject_speed = np.clip(subject_speed, 0, self.subject_speed_max)
         subject_dis -= subject_speed / self.FPS
         subject_dis = np.clip(subject_dis, 0, self.subject_max_position)
@@ -150,8 +174,12 @@ class InterceptionEnv(gym.Env):
         scaled_subject_dis = 2 * (subject_dis / self.subject_max_position - 0.5)
         scaled_subject_speed = 2 * (subject_speed / self.subject_speed_max - 0.5)
         self.scaled_state = (scaled_target_dis, scaled_target_speed, scaled_subject_dis, scaled_subject_speed)
-        
-        return np.asarray(self.scaled_state, dtype=np.float32), reward, done, self.info
+        self.scaled_state = np.asarray(self.scaled_state, dtype=np.float32)
+
+        if self.return_prior:
+            return self.scaled_state, reward, done, prior_scaled_obv, self.info
+
+        return self.scaled_state, reward, done, self.info
 
 
     def reset(self):
