@@ -141,12 +141,17 @@ class InterceptionEnv(gym.Env):
         done = bool(
             subject_dis <= 0 or target_dis <= 0 or target_subject_dis <= self.intercept_threshold
         )
-        reward = 35 if target_subject_dis <= self.intercept_threshold else -0.1
+        reward = 1 if target_subject_dis <= self.intercept_threshold else 0
 
         self.state = (target_dis, target_speed, subject_dis, subject_speed)
         self.info = (has_changed_speed, estimated_speed)
+        scaled_target_dis = 2 * (target_dis / self.target_init_distance - 0.5)
+        scaled_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
+        scaled_subject_dis = 2 * (subject_dis / self.subject_max_position - 0.5)
+        scaled_subject_speed = 2 * (subject_speed / self.subject_speed_max - 0.5)
+        self.scaled_state = (scaled_target_dis, scaled_target_speed, scaled_subject_dis, scaled_subject_speed)
         
-        return np.asarray(self.state, dtype=np.float32), reward, done, self.info
+        return np.asarray(self.scaled_state, dtype=np.float32), reward, done, self.info
 
 
     def reset(self):
@@ -168,9 +173,12 @@ class InterceptionEnv(gym.Env):
             subject_init_distance) - 2 * self.target_init_distance * subject_init_distance * np.cos(self.approach_angle * np.pi / 180))
         self.action = None
         self.info = (has_changed_speed, estimated_speed)
-        self.state = [self.target_init_distance, self.target_init_speed, subject_init_distance, subject_init_speed]
+        self.state = (self.target_init_distance, self.target_init_speed, subject_init_distance, subject_init_speed)
+        scaled_target_speed = 2 * (self.target_init_speed / self.target_max_speed - 0.5)
+        scaled_subject_dis = 2 * (subject_init_distance / self.subject_max_position - 0.5)
+        self.scaled_state = (1, scaled_target_speed, scaled_subject_dis, -1)
         
-        return np.asarray(self.state, dtype=np.float32)
+        return np.asarray(self.scaled_state, dtype=np.float32)
 
 
     def render(self, mode='human'):
