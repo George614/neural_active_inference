@@ -210,12 +210,9 @@ class InterceptionEnv(gym.Env):
 
 
     def render(self, mode='human'):
-        if self.action_type == 'speed':
-            target_dis, target_speed, has_changed_speed, subject_dis, subject_speed = self.state
-        elif self.action_type == 'acceleration':
-            target_dis, target_speed, subject_dis, subject_speed = self.state
-            has_changed_speed, estimated_speed = self.info
-            speed_diff = subject_speed - estimated_speed
+        target_dis, target_speed, subject_dis, subject_speed = self.state
+        has_changed_speed, estimated_speed = self.info
+        speed_diff = subject_speed - estimated_speed
         # scale = (1 / (self.intercept_threshold / 2)) * 4
 
         screen_width = 1000
@@ -311,16 +308,19 @@ class InterceptionEnv(gym.Env):
                 rendering.Transform(translation=(5, info_top)))
             self.viewer.add_geom(self.subject_speed_label)
 
-            if self.action_type == 'acceleration':
-                self.speed_diff_label = text_rendering.Text(
-                    'Speed difference: %.2f' % speed_diff)
-                info_top -= self.speed_diff_label.text.content_height
-                self.speed_diff_label.add_attr(
-                    rendering.Transform(translation=(5, info_top)))
-                self.viewer.add_geom(self.speed_diff_label)
+            self.speed_diff_label = text_rendering.Text(
+                'Speed difference: %.2f' % speed_diff)
+            info_top -= self.speed_diff_label.text.content_height
+            self.speed_diff_label.add_attr(
+                rendering.Transform(translation=(5, info_top)))
+            self.viewer.add_geom(self.speed_diff_label)
 
-            self.action_label = text_rendering.Text(
-                'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
+            if self.action_type == 'acceleration':
+                self.action_label = text_rendering.Text(
+                    'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
+            elif self.action_type == 'speed':
+                self.action_label = text_rendering.Text(
+                    'Pedal speed: ' + str(self.action_speed_mappings[self.action]))
             info_top -= self.action_label.text.content_height
             self.action_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
@@ -339,11 +339,14 @@ class InterceptionEnv(gym.Env):
             'Subject Distance: %.2f' % subject_dis)
         self.subject_speed_label.set_text(
             'Subject Speed: %.2f' % subject_speed)
-        self.action_label.set_text(
-            'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
         if self.action_type == 'acceleration':
-            self.speed_diff_label.set_text(
-                'Speed difference: %.2f' % speed_diff)
+            self.action_label.set_text(
+                'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
+        elif self.action_type == 'speed':
+            self.action_label.set_text(
+                'Pedal speed: ' + str(self.action_speed_mappings[self.action]))
+        self.speed_diff_label.set_text(
+            'Speed difference: %.2f' % speed_diff)
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
