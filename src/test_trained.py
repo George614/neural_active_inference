@@ -13,20 +13,19 @@ from utils import load_object
 sys.path.insert(0, 'model/')
 from interception_py_env import InterceptionEnv
 
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_pred_obv_anneal_Rte_mse_4D_obv_R35/"
+model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_pred_obv_no_Rte_mse_4D_obv_no_speedchg_cplx_prior_256net/"
 create_video = True
 n_episodes = 1
 target_speed_idx = 2
 approach_angle_idx = 3
-use_env_prior = False
-scale_obv = True
+use_env_prior = True
 env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=use_env_prior)
 
 print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
 frame_duration = 1 / env.FPS
 
-trial_num = 2
-episode_num = 50
+trial_num = 3
+episode_num = 1800
 qaiModel = load_object(model_save_path + "trial_{}_epd_{}.agent".format(trial_num, episode_num))
 print("Loaded QAI model from {}".format(model_save_path))
 
@@ -40,12 +39,6 @@ if create_video:
 
 for i in range(n_episodes):
     observation = env.reset()
-    if scale_obv:
-        # scale obv to range (0, 1)
-        observation[0] /= env.target_init_distance
-        observation[1] /= env.target_max_speed
-        observation[2] /= env.subject_max_position
-        observation[3] /= env.subject_speed_max
     if create_video:
         video = cv2.VideoWriter(model_save_path+"trial_{}_epd_{}.avi".format(trial_num, episode_num), fourcc, float(env.FPS), (width, height))
     prev_time = time.time()
@@ -59,12 +52,6 @@ for i in range(n_episodes):
             next_obv, reward, done, prior, _ = env.step(action)
         else:
             next_obv, reward, done, _ = env.step(action)
-            if scale_obv:
-                # scale obv to range (0, 1)
-                next_obv[0] /= env.target_init_distance
-                next_obv[1] /= env.target_max_speed
-                next_obv[2] /= env.subject_max_position
-                next_obv[3] /= env.subject_speed_max
         observation = next_obv    
         time.sleep(max(frame_duration - (time.time() - prev_time), 0))
         prev_time = time.time()
