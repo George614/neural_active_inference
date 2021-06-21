@@ -33,8 +33,8 @@ class QAIModel:
         self.normalize_signals = (args.getArg("normalize_signals").strip().lower() == 'true')
         self.normalize_obvs = (args.getArg("normalize_obvs").strip().lower() == 'true')
         self.EFE_bound = 1.0
-        self.max_R_ti = 1.0
-        self.min_R_ti = 0.01 #-1.0 for GLL #0.01
+        self.max_R_ti = -0.01
+        self.min_R_ti = -1.0 #-1.0 for GLL #0.01
         self.max_R_te = 1.0
         self.min_R_te = 0.01 #-1.0 for GLL #0.01
         self.obv_clip = 20.0
@@ -43,7 +43,7 @@ class QAIModel:
         self.min_obv = -1.0
         self.efe_loss = str(args.getArg("efe_loss"))
 
-        hid_dims = [128, 128]
+        hid_dims = [256, 256]
 
         ## transition dims ##
         trans_dims = [(self.dim_o + self.dim_a)]
