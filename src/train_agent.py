@@ -98,7 +98,7 @@ if args.hasArg("expert_data_path"):
     expert_data_path = args.getArg("expert_data_path") #"/home/agoroot/IdeaProjects/playful_learning/exp/mcar/expert/zoo-agent-mcar.npy"
 eval_model = (args.getArg("eval_model").strip().lower() == 'true')
 
-num_frames = 200000  # total number of training steps
+num_frames = 400000  # total number of training steps
 num_episodes = int(args.getArg("num_episodes")) #500 # 2000  # total number of training episodes
 test_episodes = 5  # number of episodes for testing
 target_update_freq = 500  # in terms of steps
@@ -130,7 +130,7 @@ gamma_final = 0.99
 gamma_ep_duration = 300
 gamma_by_episode = Linear_schedule(gamma_start, gamma_final, gamma_ep_duration)
 # rho linear schedule for annealing epistemic term
-anneal_start_reward = 40
+anneal_start_reward = 0.5
 rho_start = 1.0
 rho_final = 0.1
 rho_ep_duration = 100
@@ -154,7 +154,7 @@ else:
     replay_buffer = ReplayBuffer(buffer_size, seed=seed)
 
 # env = gym.make(args.getArg("env_name"))
-env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=0, return_prior=use_env_prior)
+env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior=use_env_prior)
 # set seeds
 tf.random.set_seed(seed)
 np.random.seed(seed)
@@ -172,6 +172,8 @@ if expert_data_path is not None:
     for idx in idx_done:
         all_data[idx, 6] = 1
     all_data = all_data[mask]
+
+all_win_mean = []
 
 for trial in range(n_trials):
     print(" >> Setting up memory replay buffers...")
@@ -199,9 +201,12 @@ for trial in range(n_trials):
         priorModel = load_object(prior_model_save_path)
     # initial our model using parameters in the config file
     pplModel = QAIModel(priorModel, args=args)
+    # # turn off epistemic term
+    # pplModel.rho.assign(0.0)
 
     global_reward = []
     reward_window = []
+    trial_win_mean = []
     mean_ep_reward = []
     std_ep_reward = []
     frame_idx = 0
@@ -389,6 +394,7 @@ for trial in range(n_trials):
         if len(reward_window) > 100:
             reward_window.pop(0)
         reward_window_mean = calc_window_mean(reward_window)
+        trial_win_mean.append(reward_window_mean)
 
         print("episode {}, r.mu = {:.3f}  win.mu = {:.3f}".format(ep_idx+1, episode_reward, reward_window_mean))
         print("-----------------------------------------------------------------")
@@ -408,11 +414,12 @@ for trial in range(n_trials):
                 rho = rho_by_episode(ep_idx - start_ep)
                 pplModel.rho.assign(rho)
         
-        if reward_window_mean > 60:
+        if reward_window_mean > 0.5:
             agent_fname = "{0}trial_{1}_epd_{2}.agent".format(out_dir, trial, ep_idx)
             save_object(pplModel, fname=agent_fname)
 
     env.close()
+    all_win_mean.append(np.asarray(trial_win_mean))
     agent_fname = "{0}trial{1}".format(out_dir, trial)
     print("==> Saving reward sequence to ", agent_fname)
     np.save("{0}_R".format(agent_fname), np.array(global_reward))
@@ -429,7 +436,7 @@ if plot_rewards:
         rewards = np.load(str(stuff))
         reward_list.append(rewards)
         fig = plt.figure()
-        line = plt.plot(np.arange(len(rewards)), rewards, linewidth=1)
+        line = plt.plot(np.arange(len(rewards)), rewards, linewidth=0.5)
         plt.xlabel("Episodes")
         plt.ylabel("Rewards")
         fig.savefig(str(result_dir)+"/trial_{}.png".format(i), dpi=200)
@@ -445,3 +452,20 @@ if plot_rewards:
     ax.set_title("Episode rewards")
     fig.savefig(str(result_dir) + "/mean_rewards.png", dpi=200)
     
+    for tr in range(len(all_win_mean)):
+        fig = plt.figure()
+        line = plt.plot(np.arange(len(all_win_mean[tr])), all_win_mean[tr], linewidth=0.5)
+        plt.xlabel("Episodes")
+        plt.ylabel("Window-averaged Rewards")
+        fig.savefig(str(result_dir)+"/trial_{}_win_avg.png".format(tr), dpi=200)
+    all_win_mean = np.stack(all_win_mean)
+    mean_rewards = np.mean(all_win_mean, axis=0)
+    std_rewards = np.std(all_win_mean, axis=0)
+    fig, ax = plt.subplots()
+    ax.plot(np.arange(len(mean_rewards)), mean_rewards,alpha=1.0, color='red', label='mean', linewidth=0.5)
+    ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='pink', alpha=0.4)
+    ax.legend(loc='upper right')
+    ax.set_ylabel("Rewards")
+    ax.set_xlabel("Number of episodes")
+    ax.set_title("Window-averaged rewards")
+    fig.savefig(str(result_dir) + "/mean_win_rewards.png", dpi=200)
