@@ -35,15 +35,17 @@ class QAIModel:
         self.EFE_bound = 1.0
         self.max_R_ti = -0.01
         self.min_R_ti = -1.0 #-1.0 for GLL #0.01
-        self.max_R_te = 1.0
-        self.min_R_te = 0.01 #-1.0 for GLL #0.01
+        self.max_R_te = -0.01
+        self.min_R_te = -1.0 #-1.0 for GLL #0.01
+        self.max_R_t = -0.01
+        self.min_R_t = -1.0
         self.obv_clip = 20.0
         self.obv_bound = 1.0
         self.max_obv = 1.0
         self.min_obv = -1.0
         self.efe_loss = str(args.getArg("efe_loss"))
 
-        hid_dims = [256, 256]
+        hid_dims = [512, 512]
 
         ## transition dims ##
         trans_dims = [(self.dim_o + self.dim_a)]
@@ -137,45 +139,51 @@ class QAIModel:
                         R_ti = -1.0 * mse(x_true=o_next_tran_mu, x_pred=o_prior_mu, keep_batch=True)
                     else:
                         R_ti = -1.0 * mse(x_true=o_next_tran_mu, x_pred=obv_prior, keep_batch=True)
-                    if self.normalize_signals is True:
-                        a = -self.EFE_bound
-                        b = self.EFE_bound
-                        self.max_R_ti = max(self.max_R_ti, float(tf.reduce_max(R_ti)))
-                        self.min_R_ti = min(self.min_R_ti, float(tf.reduce_min(R_ti)))
-                        R_ti = ((R_ti - self.min_R_ti) * (b - a))/(self.max_R_ti - self.min_R_ti) + a
-                    else:
-                        # clip the instrumental value
-                        R_ti = tf.clip_by_value(R_ti, -50.0, 50.0)
+                    # if self.normalize_signals is True:
+                    #     a = -self.EFE_bound
+                    #     b = self.EFE_bound
+                    #     self.max_R_ti = max(self.max_R_ti, float(tf.reduce_max(R_ti)))
+                    #     self.min_R_ti = min(self.min_R_ti, float(tf.reduce_min(R_ti)))
+                    #     R_ti = ((R_ti - self.min_R_ti) * (b - a))/(self.max_R_ti - self.min_R_ti) + a
+                    # else:
+                    #     # clip the instrumental value
+                    #     R_ti = tf.clip_by_value(R_ti, -50.0, 50.0)
                 elif self.instru_term == "prior_global":
                     R_ti = -1.0 * mse(x_true=o_next_tran_mu, x_pred=self.global_mu, keep_batch=True)
-                    if self.normalize_signals is True:
-                        a = -self.EFE_bound
-                        b = self.EFE_bound
-                        self.max_R_ti = max(self.max_R_ti, float(tf.reduce_max(R_ti)))
-                        self.min_R_ti = min(self.min_R_ti, float(tf.reduce_min(R_ti)))
-                        R_ti = ((R_ti - self.min_R_ti) * (b - a))/(self.max_R_ti - self.min_R_ti) + a
-                    else:
-                        # clip the instrumental value
-                        R_ti = tf.clip_by_value(R_ti, -50.0, 50.0)
+                    # if self.normalize_signals is True:
+                    #     a = -self.EFE_bound
+                    #     b = self.EFE_bound
+                    #     self.max_R_ti = max(self.max_R_ti, float(tf.reduce_max(R_ti)))
+                    #     self.min_R_ti = min(self.min_R_ti, float(tf.reduce_min(R_ti)))
+                    #     R_ti = ((R_ti - self.min_R_ti) * (b - a))/(self.max_R_ti - self.min_R_ti) + a
+                    # else:
+                    #     # clip the instrumental value
+                    #     R_ti = tf.clip_by_value(R_ti, -50.0, 50.0)
                 else:
                     R_ti = reward
                     if len(R_ti.shape) < 2:
                         R_ti = tf.expand_dims(R_ti, axis=1)
                 ### epistemic term ###
                 delta = (obv_next - o_next_tran_mu)
-                R_te = tf.reduce_sum(delta * delta, axis=1, keepdims=True)
-                if self.normalize_signals is True:
-                    a = -self.EFE_bound
-                    b = self.EFE_bound
-                    self.max_R_te = max(self.max_R_te, float(tf.reduce_max(R_te)))
-                    self.min_R_te = min(self.min_R_te, float(tf.reduce_min(R_te)))
-                    R_te = ((R_te - self.min_R_te) * (b - a))/(self.max_R_te - self.min_R_te) + a
-                else:
-                    # clip the epistemic value
-                    R_te = tf.clip_by_value(R_te, -50.0, 50.0)
+                R_te = -1.0 * tf.reduce_sum(delta * delta, axis=1, keepdims=True)
+                # if self.normalize_signals is True:
+                #     a = -self.EFE_bound
+                #     b = self.EFE_bound
+                #     self.max_R_te = max(self.max_R_te, float(tf.reduce_max(R_te)))
+                #     self.min_R_te = min(self.min_R_te, float(tf.reduce_min(R_te)))
+                #     R_te = ((R_te - self.min_R_te) * (b - a))/(self.max_R_te - self.min_R_te) + a
+                # else:
+                #     # clip the epistemic value
+                #     R_te = tf.clip_by_value(R_te, -50.0, 50.0)
 
                 # the nagative EFE value, i.e. the reward. Note the sign here
                 R_t = R_ti + self.rho * R_te
+                if self.normalize_signals is True:
+                    a = -self.EFE_bound
+                    b = self.EFE_bound
+                    self.max_R_t = max(self.max_R_t, float(tf.reduce_max(R_t)))
+                    self.min_R_t = min(self.min_R_t, float(tf.reduce_min(R_t)))
+                    R_t = ((R_t - self.min_R_t) * (b - a)) / (self.max_R_t - self.min_R_t) + a
 
             ## model reconstruction loss ##
             loss_reconst = mse(x_true=obv_next, x_pred=o_next_tran_mu, keep_batch=True) #g_nll(obv_next, o_next_mu, o_next_std * o_next_std)
