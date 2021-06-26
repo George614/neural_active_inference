@@ -252,18 +252,21 @@ for trial in range(n_trials):
                 else:
                     per_buffer.push(observation, action, reward, next_obv, done)
                 observation = next_obv
-                batch_data = per_buffer.sample(batch_size, beta=beta)
+                batch_data = None
+                if len(per_buffer) > learning_start:
+                    batch_data = per_buffer.sample(batch_size, beta=beta)
                 efe_N = batch_size * 1.0
-                if use_env_prior:
-                    [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior, batch_indices, batch_weights] = batch_data
-                else:
-                    [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_indices, batch_weights] = batch_data
-                batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
-                if use_env_prior:
-                    grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, obv_prior=batch_prior)
-                else:
-                    grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, reward=batch_reward)
-                per_buffer.update_priorities(batch_indices, priorities.numpy())
+                if batch_data is not None:
+                    if use_env_prior:
+                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior, batch_indices, batch_weights] = batch_data
+                    else:
+                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_indices, batch_weights] = batch_data
+                    batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
+                    if use_env_prior:
+                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, obv_prior=batch_prior)
+                    else:
+                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, reward=batch_reward)
+                    per_buffer.update_priorities(batch_indices, priorities.numpy())
             else:
                 if use_env_prior:
                     replay_buffer.push(observation, action, reward, next_obv, done, obv_prior)
@@ -444,8 +447,8 @@ if plot_rewards:
     mean_rewards = np.mean(reward_list, axis=0)
     std_rewards = np.std(reward_list, axis=0)
     fig, ax = plt.subplots()
-    ax.plot(np.arange(len(mean_rewards)), mean_rewards,alpha=0.7, color='red', label='mean', linewidth=0.5)
-    ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, None), np.clip(mean_rewards + std_rewards, 0, 100), color='#888888', alpha=0.4)
+    ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=0.7, color='red', label='mean', linewidth=0.5)
+    ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='#888888', alpha=0.4)
     ax.legend(loc='upper right')
     ax.set_ylabel("Rewards")
     ax.set_xlabel("Number of episodes")
@@ -462,7 +465,7 @@ if plot_rewards:
     mean_rewards = np.mean(all_win_mean, axis=0)
     std_rewards = np.std(all_win_mean, axis=0)
     fig, ax = plt.subplots()
-    ax.plot(np.arange(len(mean_rewards)), mean_rewards,alpha=1.0, color='red', label='mean', linewidth=0.5)
+    ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='red', label='mean', linewidth=0.5)
     ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='pink', alpha=0.4)
     ax.legend(loc='upper right')
     ax.set_ylabel("Rewards")
