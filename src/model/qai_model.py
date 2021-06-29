@@ -85,7 +85,7 @@ class QAIModel:
     def update_target(self):
         self.efe_target.set_weights(self.efe, tau=self.tau)
 
-    def act(self, o_t):
+    def act(self, o_t, return_efe=False):
         if self.normalize_obvs:
             o_t = tf.clip_by_value(o_t, -self.obv_clip, self.obv_clip)
             a = -self.obv_bound
@@ -100,6 +100,8 @@ class QAIModel:
         else:
             action = tf.random.uniform(shape=(), maxval=self.dim_a, dtype=tf.int32)
 
+        if return_efe:
+            return action, efe_t
         return action
 
     def clear_state(self):
