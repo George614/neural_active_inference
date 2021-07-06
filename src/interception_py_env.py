@@ -88,9 +88,8 @@ class InterceptionEnv(gym.Env):
             # instantaneous speed change
             self.action_space = spaces.Discrete(6)
             self.action_speed_mappings = [2.0, 4.0, 8.0, 10.0, 12.0, 14.0]
-            self.low = np.array([0.0, np.min(self.target_init_speed_list), 0.0, 0.0, 0.0], dtype=np.float32)
-            self.high = np.array([self.target_init_distance, self.target_max_speed, 1.0,
-                                  self.subject_max_position, self.subject_speed_max], dtype=np.float32)
+            self.low = np.array([-1.0, -1.0, -1.0, -1.0], dtype=np.float32)
+            self.high = np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32)
         elif self.action_type == 'acceleration':
             # accelerate / decelerate / none
             self.action_space = spaces.Discrete(5)
@@ -117,7 +116,7 @@ class InterceptionEnv(gym.Env):
             action), "%r (%s) invalid" % (action, type(action))
         self.action = action
         target_dis, target_speed, subject_dis, subject_speed = self.state
-        has_changed_speed, _ = self.info
+        has_changed_speed = self.info['has_changed_speed']
 
         self.time += 1.0 / self.FPS
         if self.time >= self.time_to_change_speed and not has_changed_speed:
@@ -168,7 +167,8 @@ class InterceptionEnv(gym.Env):
         reward = 1 if target_subject_dis <= self.intercept_threshold else 0
 
         self.state = (target_dis, target_speed, subject_dis, subject_speed)
-        self.info = (has_changed_speed, estimated_speed)
+        self.info = {'has_changed_speed' : has_changed_speed,
+                     'estimated_speed' : estimated_speed}
         scaled_target_dis = 2 * (target_dis / self.target_init_distance - 0.5)
         scaled_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
         scaled_subject_dis = 2 * (subject_dis / self.subject_max_position - 0.5)
@@ -200,7 +200,8 @@ class InterceptionEnv(gym.Env):
         target_subject_dis = np.sqrt(np.square(self.target_init_distance) + np.square(
             subject_init_distance) - 2 * self.target_init_distance * subject_init_distance * np.cos(self.approach_angle * np.pi / 180))
         self.action = None
-        self.info = (has_changed_speed, estimated_speed)
+        self.info = {'has_changed_speed' : has_changed_speed,
+                     'estimated_speed' : estimated_speed}
         self.state = (self.target_init_distance, self.target_init_speed, subject_init_distance, subject_init_speed)
         scaled_target_speed = 2 * (self.target_init_speed / self.target_max_speed - 0.5)
         scaled_subject_dis = 2 * (subject_init_distance / self.subject_max_position - 0.5)
@@ -211,7 +212,8 @@ class InterceptionEnv(gym.Env):
 
     def render(self, mode='human'):
         target_dis, target_speed, subject_dis, subject_speed = self.state
-        has_changed_speed, estimated_speed = self.info
+        has_changed_speed = self.info['has_changed_speed']
+        estimated_speed = self.info['estimated_speed']
         speed_diff = subject_speed - estimated_speed
         # scale = (1 / (self.intercept_threshold / 2)) * 4
 
