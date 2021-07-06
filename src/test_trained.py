@@ -13,17 +13,24 @@ from utils import load_object
 sys.path.insert(0, 'model/')
 from interception_py_env import InterceptionEnv
 
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_pred_obv_negRte_mse_4D_obv_no_speedchg_cplx_prior_512net/"
+model_save_path = "D:/Projects/neural_active_inference/exp/mcar/qai/correct_-Rti_actual_obv_anneal_Rte_mse/"
+env_id = 'mcar' # or 'interception'
 create_video = True
 n_episodes = 1
 target_speed_idx = 2
 approach_angle_idx = 3
-use_env_prior = True
+use_env_prior = False
 plot_efe = True
-env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=use_env_prior)
 
-print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
-frame_duration = 1 / env.FPS
+if env_id == 'interception':
+    env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=use_env_prior)
+    print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
+elif env_id == 'mcar':
+    import gym
+    env = gym.make("MountainCar-v0")
+
+FPS = 30
+frame_duration = 1 / FPS
 
 trial_num = 0
 episode_num = 1650
@@ -46,7 +53,7 @@ if plot_efe:
 for i in range(n_episodes):
     observation = env.reset()
     if create_video:
-        video = cv2.VideoWriter(model_save_path+"trial_{}_epd_{}.avi".format(trial_num, episode_num), fourcc, float(env.FPS//2), (width, height))
+        video = cv2.VideoWriter(model_save_path+"trial_{}_epd_{}.avi".format(trial_num, episode_num), fourcc, float(FPS), (width, height))
     if plot_efe:
         efe_list = []
     prev_time = time.time()
@@ -84,13 +91,21 @@ for i in range(n_episodes):
         ymax = np.max(np.asarray(efe_list))
         ymin = np.min(np.asarray(efe_list))
         ax = plt.axes(ylim=(ymin, ymax))
-        ax.set_xlabel('Pedal positions')
-        ax.set_ylabel('EFE values')
-        ax.set_title('EFE values for each action (pedal position)')
-        actions = ['2.0', '4.0', '8.0', '10.0', '12.0', '14.0']
+        if env_id == 'interception':
+            ax.set_xlabel('Actions (pedal positions)')
+            ax.set_ylabel('EFE values')
+            ax.set_title('EFE values for each action (pedal position)')
+            actions = ['2.0', '4.0', '8.0', '10.0', '12.0', '14.0']
+        elif env_id == 'mcar':
+            ax.set_xlabel('Actions')
+            ax.set_ylabel('EFE values')
+            actions = ['left', 'none', 'right']
 
         def init():
-            colors = ['b','b','b','b','b','b']
+            if env_id == 'interception':
+                colors = ['b','b','b','b','b','b']
+            elif env_id == 'mcar':
+                colors = ['b','b','b']
             colors[np.argmax(efe_list[0])] = 'r'
             bars = ax.bar(actions, efe_list[0], color=colors)
             return bars
@@ -99,14 +114,17 @@ for i in range(n_episodes):
             for bar in ax.containers:
                 bar.remove()
             efe_vals = efe_list[i]
-            colors = ['b','b','b','b','b','b']
+            if env_id == 'interception':
+                colors = ['b','b','b','b','b','b']
+            elif env_id == 'mcar':
+                colors = ['b','b','b']
             colors[np.argmax(efe_vals)] = 'r'
             bars = ax.bar(actions, efe_vals, color=colors)
             return bars
         
         print("Creating animation for EFE values...")
         ani = FuncAnimation(fig, update, init_func=init, frames=len(efe_list), blit=False)
-        ani.save(os.path.join(model_save_path, "EFE_animation_trial_{}_epd_{}.avi".format(trial_num, episode_num)), fps=env.FPS//2, dpi=200)
+        ani.save(os.path.join(model_save_path, "EFE_animation_trial_{}_epd_{}.avi".format(trial_num, episode_num)), fps=FPS, dpi=200)
 
 env.close()
 print("Test simulation finished.")
