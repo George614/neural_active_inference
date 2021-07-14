@@ -52,7 +52,7 @@ def create_optimizer(opt_type, eta, momentum=0.9, epsilon=1e-08):
     elif opt_type == "momentum":
         optimizer = tf.compat.v1.train.MomentumOptimizer(learning_rate=eta_v,momentum=moment_v,use_nesterov=False)
     elif opt_type == "adam":
-        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=eta_v,beta1=0.9, beta2=0.999, epsilon=epsilon) #1e-08)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=eta_v,beta1=0.9, beta2=0.999) #1e-08)
     elif opt_type == "rmsprop":
         optimizer = tf.compat.v1.train.RMSPropOptimizer(learning_rate=eta_v,decay=0.9, momentum=moment_v, epsilon=epsilon) #epsilon=1e-10)
     else:
@@ -63,9 +63,9 @@ def create_optimizer(opt_type, eta, momentum=0.9, epsilon=1e-08):
 # read in configuration file and extract necessary variables/constants
 options, remainder = getopt.getopt(sys.argv[1:], '', ["cfg_fname=","gpu_id="])
 # Collect arguments from argv
-cfg_fname = None
-use_gpu = False
-gpu_id = -1
+cfg_fname = "run_interception_ai.cfg"
+use_gpu = True
+gpu_id = 0
 for opt, arg in options:
     if opt in ("--cfg_fname"):
         cfg_fname = arg.strip()
@@ -98,32 +98,33 @@ if args.hasArg("expert_data_path"):
     expert_data_path = args.getArg("expert_data_path") #"/home/agoroot/IdeaProjects/playful_learning/exp/mcar/expert/zoo-agent-mcar.npy"
 eval_model = (args.getArg("eval_model").strip().lower() == 'true')
 
-num_frames = 400000  # total number of training steps
+num_frames = 240000  # total number of training steps
 num_episodes = int(args.getArg("num_episodes")) #500 # 2000  # total number of training episodes
 test_episodes = 5  # number of episodes for testing
-target_update_freq = 500  # in terms of steps
+target_update_freq = 600  # in terms of steps
 target_update_ep = int(args.getArg("target_update_ep")) #2  # in terms of episodes
 buffer_size = int(args.getArg("buffer_size")) #200000 # 100000
 learning_start = int(args.getArg("learning_start"))
 prob_alpha = 0.6
 batch_size = int(args.getArg("batch_size")) #256
+dim_a = int(args.getArg("dim_a"))
+dim_o = int(args.getArg("dim_o"))
 grad_norm_clip = float(args.getArg("grad_norm_clip")) #1.0 #10.0
 clip_type = args.getArg("clip_type")
 log_interval = 4
-keep_expert_batch = True
-if expert_data_path is None:
-    keep_expert_batch = False
+keep_expert_batch = args.getArg("keep_expert_batch").strip().lower() == 'true'
 use_per_buffer = args.getArg("use_per_buffer").strip().lower() == 'true'
 equal_replay_batches = (args.getArg("equal_replay_batches").strip().lower() == 'true')
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
 use_env_prior = args.getArg("env_prior").strip().lower() == 'true'
-seed = 44
+seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
 epsilon_start = float(args.getArg("epsilon_start")) #0.025 #0.9
 epsilon_final = 0.02
-epsilon_decay = num_frames / 20
-epsilon_by_frame = Exponential_schedule(epsilon_start, epsilon_final, epsilon_decay)
+# epsilon_decay = num_frames / 20
+# epsilon_by_frame = Exponential_schedule(epsilon_start, epsilon_final, epsilon_decay)
+epsilon_by_frame = Linear_schedule(epsilon_start, epsilon_final, num_frames * 0.2)
 # gamma linear schedule for VAE regularization
 gamma_start = 0.01
 gamma_final = 0.99
@@ -140,18 +141,16 @@ beta_start = 0.4
 beta_final = 1.0
 beta_ep_duration = 600
 beta_by_episode = Linear_schedule(beta_start, beta_final, beta_ep_duration)
+# training frenquency, update model weights after collecting every n transitions from env
+train_freq = 16
+# apply n gradient steps in each training cycle
+gradient_steps = 8
 
-### initialize optimizer and buffers ###
+### initialize optimizer and environment ###
 opt_type = args.getArg("optimizer").strip().lower()
 lr  = tf.Variable( float(args.getArg("learning_rate")) )
 learning_rate_decay = float(args.getArg("learning_rate_decay"))
 opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
-
-if use_per_buffer:
-    per_buffer = NaivePrioritizedBuffer(buffer_size, prob_alpha=prob_alpha)
-else:
-    expert_buffer = ReplayBuffer(buffer_size, seed=seed)
-    replay_buffer = ReplayBuffer(buffer_size, seed=seed)
 
 # env = gym.make(args.getArg("env_name"))
 env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior=use_env_prior)
@@ -159,36 +158,42 @@ env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior=use
 tf.random.set_seed(seed)
 np.random.seed(seed)
 env.seed(seed=seed)
+args.variables['seed'] = seed
 
 ################################################################################
-### load and pre-process human expert-batch data ###
+### load and pre-process expert-batch data ###
 all_data = None
 if expert_data_path is not None:
     print("RL-zoo expert data path: ", expert_data_path)
     all_data = np.load(expert_data_path, allow_pickle=True)
-    idx_done = np.where(all_data[:, 6] == 1)[0]
-    idx_done = idx_done - 1  # fix error on next_obv when done in original data
-    mask = np.not_equal(all_data[:, 6], 1)
-    for idx in idx_done:
-        all_data[idx, 6] = 1
-    all_data = all_data[mask]
+    # idx_done = np.where(all_data[:, -1] == 1)[0]
+    # idx_done = idx_done - 1  # fix error on next_obv when done in original data
+    # mask = np.not_equal(all_data[:, -1], 1)
+    # for idx in idx_done:
+    #     all_data[idx, -1] = 1
+    # all_data = all_data[mask]
 
 all_win_mean = []
 
 for trial in range(n_trials):
-    print(" >> Setting up memory replay buffers...")
+    print(" >> Setting up experience replay buffers...")
+    if use_per_buffer:
+        per_buffer = NaivePrioritizedBuffer(buffer_size, prob_alpha=prob_alpha)
+    else:
+        expert_buffer = ReplayBuffer(buffer_size, seed=seed)
+        replay_buffer = ReplayBuffer(buffer_size, seed=seed)
     if all_data is not None:
-        n_tossed = 0
+        # n_tossed = 0
         for i in range(min(len(all_data), buffer_size)):
-            o_t, action, reward, o_tp1, done = all_data[i, :2], all_data[i, 2], all_data[i, 3], all_data[i, 4:6], all_data[i, 6]
-            if float(done) < 1.0:
-                if use_per_buffer:
-                    per_buffer.push(o_t, action, reward, o_tp1, done)
-                else:
-                    expert_buffer.push(o_t, action, reward, o_tp1, done)
+            o_t, action, reward, o_tp1, done = all_data[i, :dim_o], all_data[i, dim_o], all_data[i, dim_o+1], all_data[i, dim_o+2:-1], all_data[i, -1]
+            # if float(done) < 1.0:
+            if use_per_buffer:
+                per_buffer.push(o_t, action, reward, o_tp1, done)
             else:
-                n_tossed += 1
-        print(" > Threw out {0} invalid samples in expert batch".format(n_tossed))
+                expert_buffer.push(o_t, action, reward, o_tp1, done)
+            # else:
+            #     n_tossed += 1
+        # print(" > Threw out {0} invalid samples in expert batch".format(n_tossed))
 
         if not keep_expert_batch and not use_per_buffer:
             replay_buffer = expert_buffer
@@ -202,7 +207,7 @@ for trial in range(n_trials):
     # initial our model using parameters in the config file
     pplModel = QAIModel(priorModel, args=args)
     # # turn off epistemic term
-    # pplModel.rho.assign(0.0)
+    pplModel.rho.assign(0.0)
 
     global_reward = []
     reward_window = []
@@ -212,6 +217,7 @@ for trial in range(n_trials):
     frame_idx = 0
     crash = False
     rho_anneal_start = False
+    loss_efe = None
 
     print(" >> Starting simulation...")
     observation = env.reset()
@@ -261,7 +267,7 @@ for trial in range(n_trials):
                         [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior, batch_indices, batch_weights] = batch_data
                     else:
                         [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_indices, batch_weights] = batch_data
-                    batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
+                    batch_action = tf.one_hot(batch_action, depth=dim_a)
                     if use_env_prior:
                         grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, obv_prior=batch_prior)
                     else:
@@ -294,77 +300,81 @@ for trial in range(n_trials):
                         batch_data = expert_buffer.sample(batch_size)
                 else:
                     batch_data = None
-                    if len(replay_buffer) > learning_start:
-                        batch_data = replay_buffer.sample(batch_size)
+                    if len(replay_buffer) > learning_start and frame_idx % train_freq == 0:
+                    # if len(replay_buffer) > batch_size:
+                        # batch_data = replay_buffer.sample(batch_size)
+                    # else:
+                    #     batch_data = replay_buffer.sample(len(replay_buffer))
+                        for _ in range(gradient_steps):
+                            batch_data = replay_buffer.sample(batch_size)
+                            if use_env_prior:
+                                [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior] = batch_data
+                                batch_action = tf.one_hot(batch_action, depth=dim_a)
+                                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, obv_prior=batch_prior)
+                            else:
+                                [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done] = batch_data
+                                batch_action = tf.one_hot(batch_action, depth=dim_a)
+                                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, reward=batch_reward)
 
-                if batch_data is not None:
-                    if use_env_prior:
-                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior] = batch_data
-                        batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
-                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, obv_prior=batch_prior)
-                    else:
-                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done] = batch_data
-                        batch_action = tf.one_hot(batch_action, depth=int(args.getArg("dim_a")))
-                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, reward=batch_reward)
+                            if tf.math.is_nan(loss_efe):
+                                print("loss_efe nan at frame #", frame_idx)
+                                break
 
-            if batch_data is not None:
-                if tf.math.is_nan(loss_efe):
-                    print("loss_efe nan at frame #", frame_idx)
-                    break
+                            ### clip gradients  ###
+                            crash = False
+                            grads_model_clipped = []
+                            for grad in grads_model:
+                                if grad is not None:
+                                    if clip_type == "hard_clip":
+                                        grad = tf.clip_by_value(grad, -grad_norm_clip, grad_norm_clip)
+                                    else:
+                                        grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
+                                    if tf.math.reduce_any(tf.math.is_nan(grad)):
+                                        print("grad_model nan at frame # ", frame_idx)
+                                        crash = True
+                                grads_model_clipped.append(grad)
 
-                ### clip gradients  ###
-                crash = False
-                grads_model_clipped = []
-                for grad in grads_model:
-                    if grad is not None:
-                        if clip_type == "hard_clip":
-                            grad = tf.clip_by_value(grad, -grad_norm_clip, grad_norm_clip)
-                        else:
-                            grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
-                        if tf.math.reduce_any(tf.math.is_nan(grad)):
-                            print("grad_model nan at frame # ", frame_idx)
-                            crash = True
-                    grads_model_clipped.append(grad)
+                            grads_efe_clipped = []
+                            for grad in grads_efe:
+                                if grad is not None:
+                                    if clip_type == "hard_clip":
+                                        grad = tf.clip_by_value(grad, -grad_norm_clip, grad_norm_clip)
+                                    else:
+                                        grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
+                                    if tf.math.reduce_any(tf.math.is_nan(grad)):
+                                        print("grad_efe nan at frame # ", frame_idx)
+                                        crash = True
+                                grads_efe_clipped.append(grad)
 
-                grads_efe_clipped = []
-                for grad in grads_efe:
-                    if grad is not None:
-                        if clip_type == "hard_clip":
-                            grad = tf.clip_by_value(grad, -grad_norm_clip, grad_norm_clip)
-                        else:
-                            grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
-                        if tf.math.reduce_any(tf.math.is_nan(grad)):
-                            print("grad_efe nan at frame # ", frame_idx)
-                            crash = True
-                    grads_efe_clipped.append(grad)
+                            if crash:
+                                break
 
-                if crash:
-                    break
+                            ### Gradient descend by Adam optimizer excluding variables with no gradients ###
+                            opt.apply_gradients(zip(grads_model_clipped, pplModel.param_var))
+                            opt.apply_gradients(zip(grads_efe_clipped, pplModel.param_var))
+                
+            if learning_rate_decay > 0.0:
+                lower_bound_lr = 1e-7
+                lr.assign(max(lower_bound_lr, float(lr * learning_rate_decay)))
 
-                ### Gradient descend by Adam optimizer excluding variables with no gradients ###
-                opt.apply_gradients(zip(grads_model_clipped, pplModel.param_var))
-                opt.apply_gradients(zip(grads_efe_clipped, pplModel.param_var))
-                if learning_rate_decay > 0.0:
-                    lower_bound_lr = 1e-7
-                    lr.assign(max(lower_bound_lr, float(lr * learning_rate_decay)))
-
-                # if frame_idx % target_update_freq == 0:
-                #     pplModel.update_target()
+            if frame_idx % target_update_freq == 0:
+                pplModel.update_target()
 
                 #if frame_idx % 200 == 0:
                 #    print("frame {}, loss_model {:.3f}, loss_efe {:.3f}".format(frame_idx, loss_model.numpy(), loss_efe.numpy()))
 
         pplModel.clear_state()
-        if ep_idx % target_update_ep == 0:
-            pplModel.update_target()
+        # if ep_idx % target_update_ep == 0:
+        #     pplModel.update_target()
 
         ### after each training episode is done ###
         observation = env.reset()
 
-        if batch_data is not None:
+        if loss_efe is not None:
             print("-----------------------------------------------------------------")
             print("frame {0}, L.model = {1}, L.efe = {2}  eps = {3}".format(frame_idx, loss_model.numpy(),
                   (loss_efe/efe_N).numpy(), pplModel.epsilon.numpy()))
+        
         ### evaluate the PPL model using a number of episodes ###
         if eval_model is True:
             #pplModel.rho.assign(0.0)
@@ -392,7 +402,6 @@ for trial in range(n_trials):
         pplModel.clear_state()
         # else --> just use training reward as episode reward (online learning)
         global_reward.append(episode_reward)
-
         reward_window.append(episode_reward)
         if len(reward_window) > 100:
             reward_window.pop(0)
