@@ -13,9 +13,9 @@ two free parameters, i.e., a multivariate Gaussian with mean and variance.
 class ProbMLP:
     def __init__(self, name, z_dims, act_fun="tanh", out_fun="identity", init_type="gaussian",
                  wght_sd=0.05, model_variance=False, sigma_fun="softplus", load_dict=None,
-                 use_layer_norm=False):
+                 use_layer_norm=False, seed=0):
         self.name = name
-        self.seed = 69
+        self.seed = seed
         self.z_dims = z_dims # [input_dim, n_hid, ...., output_dim]
         self.model_variance = model_variance
         self.use_layer_norm = use_layer_norm
