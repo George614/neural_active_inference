@@ -111,10 +111,11 @@ class InterceptionEnv(gym.Env):
         return [seed]
 
 
-    def step(self, action):
-        assert self.action_space.contains(
-            action), "%r (%s) invalid" % (action, type(action))
-        self.action = action
+    def step(self, action=None):
+        if action is not None:
+            assert self.action_space.contains(
+                action), "%r (%s) invalid" % (action, type(action))
+            self.action = action
         target_dis, target_speed, subject_dis, subject_speed = self.state
         has_changed_speed = self.info['has_changed_speed']
 
@@ -148,7 +149,11 @@ class InterceptionEnv(gym.Env):
                 scaled_prior_sub_speed = 2 * (prior_sub_speed / self.subject_speed_max - 0.5)
                 prior_scaled_obv = (scaled_prior_target_dis, scaled_prior_target_speed, scaled_prior_sub_dis, scaled_prior_sub_speed)
                 prior_scaled_obv = np.asarray(prior_scaled_obv, dtype=np.float32)
-            pedal_speed = self.action_speed_mappings[action]
+            if action is not None:
+                pedal_speed = self.action_speed_mappings[action]
+            else:
+                pedal_speed = self.action_speed_mappings[action_prior]
+                self.action = action_prior
             subject_speed += (pedal_speed - subject_speed) * self.lag_coefficient
         elif self.action_type == 'acceleration':
             subject_speed += self.action_acceleration_mappings[action]
