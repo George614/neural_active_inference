@@ -98,7 +98,7 @@ if args.hasArg("expert_data_path"):
     expert_data_path = args.getArg("expert_data_path") #"/home/agoroot/IdeaProjects/playful_learning/exp/mcar/expert/zoo-agent-mcar.npy"
 eval_model = (args.getArg("eval_model").strip().lower() == 'true')
 
-num_frames = 240000  # total number of training steps
+num_frames = 480000  # total number of training steps
 num_episodes = int(args.getArg("num_episodes")) #500 # 2000  # total number of training episodes
 test_episodes = 5  # number of episodes for testing
 target_update_freq = 600  # in terms of steps
@@ -112,9 +112,11 @@ dim_o = int(args.getArg("dim_o"))
 grad_norm_clip = float(args.getArg("grad_norm_clip")) #1.0 #10.0
 clip_type = args.getArg("clip_type")
 log_interval = 4
+epsilon_greedy = args.getArg("epsilon_greedy").strip().lower() == 'true'
+epistemic_off = args.getArg("epistemic_off").strip().lower() == 'true'
 keep_expert_batch = args.getArg("keep_expert_batch").strip().lower() == 'true'
 use_per_buffer = args.getArg("use_per_buffer").strip().lower() == 'true'
-equal_replay_batches = (args.getArg("equal_replay_batches").strip().lower() == 'true')
+equal_replay_batches = args.getArg("equal_replay_batches").strip().lower() == 'true'
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
 use_env_prior = args.getArg("env_prior").strip().lower() == 'true'
@@ -206,8 +208,9 @@ for trial in range(n_trials):
         priorModel = load_object(prior_model_save_path)
     # initial our model using parameters in the config file
     pplModel = QAIModel(priorModel, args=args)
-    # # turn off epistemic term
-    pplModel.rho.assign(0.0)
+    if epistemic_off:
+        # turn off epistemic term
+        pplModel.rho.assign(0.0)
 
     global_reward = []
     reward_window = []
@@ -235,8 +238,10 @@ for trial in range(n_trials):
         episode_reward = 0
         while not done:
             frame_idx += 1
-            epsilon = epsilon_by_frame(frame_idx)
-            # epsilon = 0.0
+            if epsilon_greedy:
+                epsilon = epsilon_by_frame(frame_idx)
+            else:
+                epsilon = 0.0
             pplModel.epsilon.assign(epsilon)
 
             obv = tf.convert_to_tensor(observation, dtype=tf.float32)
