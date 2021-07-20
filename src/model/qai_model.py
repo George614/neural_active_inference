@@ -165,8 +165,10 @@ class QAIModel:
                 #     R_t = ((R_t - self.min_R_t) * (b - a)) / (self.max_R_t - self.min_R_t) + a
 
             ## model reconstruction loss ##
-            loss_reconst = mse(x_true=obv_next, x_pred=o_next_tran_mu) #, keep_batch=True) #g_nll(obv_next, o_next_mu, o_next_std * o_next_std)
+            loss_reconst = mse(x_true=obv_next, x_pred=o_next_tran_mu, keep_batch=True) #g_nll(obv_next, o_next_mu, o_next_std * o_next_std)
             done = tf.cast(done, dtype=tf.float32)
+            loss_reconst *= (1 - done) # done samples contain invalid observations
+            loss_reconst = tf.math.reduce_mean(loss_reconst)
 
             # regularization for weights
             loss_l2 = 0.0
