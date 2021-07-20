@@ -118,19 +118,26 @@ class InterceptionEnv(gym.Env):
             self.action = action
         target_dis, target_speed, subject_dis, subject_speed = self.state
         has_changed_speed = self.info['has_changed_speed']
-
         self.time += 1.0 / self.FPS
+        
+        # handle the target changing its speed
         if self.time >= self.time_to_change_speed and not has_changed_speed:
             has_changed_speed = 1
-        # if has_changed_speed:
-        #     speed_proportion = (
-        #         self.time - self.time_to_change_speed) / self.speed_change_duration
-        #     target_speed = min(self.target_final_speed, speed_proportion * (
-        #         self.target_final_speed - self.target_init_speed) + self.target_init_speed)
+        if has_changed_speed:
+            speed_proportion = (
+                self.time - self.time_to_change_speed) / self.speed_change_duration
+            target_speed = min(self.target_final_speed, speed_proportion * (
+                self.target_final_speed - self.target_init_speed) + self.target_init_speed)
 
-        estimated_speed = subject_dis / (target_dis / target_speed)
-        if self.action_type == 'speed':
+        # calculate estimated subject speed based on status of target changing its speed
+        if self.time < self.time_finish_speed_change:
+            estimated_speed = self.info['estimated_speed']
+        else:
+            estimated_speed = subject_dis / (target_dis / target_speed)
+
+        if self.action_type == 'speed': # choose pedal position
             if self.return_prior:
+                # use prior preference to choose pedeal speed then calculate the 4D observations
                 prior_speed_diffs = []
                 for prior_action in range(self.action_space.n):
                     pedal_speed_n = self.action_speed_mappings[prior_action]
@@ -143,19 +150,22 @@ class InterceptionEnv(gym.Env):
                 prior_sub_dis = subject_dis - prior_sub_speed / self.FPS
                 prior_target_dis = target_dis - target_speed / self.FPS
                 # prior_obv = (prior_target_dis, target_speed, prior_sub_dis, prior_sub_speed)
+                # scale the observations to range (-1, 1)
                 scaled_prior_target_dis = 2 * (prior_target_dis / self.target_init_distance - 0.5)
                 scaled_prior_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
                 scaled_prior_sub_dis = 2 * (prior_sub_dis / self.subject_max_position - 0.5)
                 scaled_prior_sub_speed = 2 * (prior_sub_speed / self.subject_speed_max - 0.5)
                 prior_scaled_obv = (scaled_prior_target_dis, scaled_prior_target_speed, scaled_prior_sub_dis, scaled_prior_sub_speed)
                 prior_scaled_obv = np.asarray(prior_scaled_obv, dtype=np.float32)
+            
             if action is not None:
                 pedal_speed = self.action_speed_mappings[action]
-            else:
+            else: # choose optimal action
                 pedal_speed = self.action_speed_mappings[action_prior]
                 self.action = action_prior
             subject_speed += (pedal_speed - subject_speed) * self.lag_coefficient
-        elif self.action_type == 'acceleration':
+        
+        elif self.action_type == 'acceleration': # choose acceleration
             subject_speed += self.action_acceleration_mappings[action]
         
         subject_speed = np.clip(subject_speed, 0, self.subject_speed_max)
@@ -174,6 +184,7 @@ class InterceptionEnv(gym.Env):
         self.state = (target_dis, target_speed, subject_dis, subject_speed)
         self.info = {'has_changed_speed' : has_changed_speed,
                      'estimated_speed' : estimated_speed}
+        # scale the observations to range (-1, 1)
         scaled_target_dis = 2 * (target_dis / self.target_init_distance - 0.5)
         scaled_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
         scaled_subject_dis = 2 * (subject_dis / self.subject_max_position - 0.5)
@@ -188,6 +199,7 @@ class InterceptionEnv(gym.Env):
 
 
     def reset(self):
+        # reset all parameters specific to the current episode
         self.time_to_change_speed = self.np_random.uniform(
             low=self.time_to_change_speed_min, high=self.time_to_change_speed_max)
         self.target_final_speed = np.clip(
@@ -197,21 +209,34 @@ class InterceptionEnv(gym.Env):
             self.target_max_speed
         )
         self.time = 0.0
+        self.time_finish_speed_change = self.time_to_change_speed + self.speed_change_duration
         subject_init_distance = self.np_random.uniform(
             low=self.subject_init_distance_min, high=self.subject_init_distance_max)
         subject_init_speed = 0.0
         has_changed_speed = 0
-        estimated_speed = subject_init_distance / (self.target_init_distance / self.target_init_speed)
+        # estimated_speed = subject_init_distance / (self.target_init_distance / self.target_init_speed)
         target_subject_dis = np.sqrt(np.square(self.target_init_distance) + np.square(
             subject_init_distance) - 2 * self.target_init_distance * subject_init_distance * np.cos(self.approach_angle * np.pi / 180))
         self.action = None
-        self.info = {'has_changed_speed' : has_changed_speed,
-                     'estimated_speed' : estimated_speed}
         self.state = (self.target_init_distance, self.target_init_speed, subject_init_distance, subject_init_speed)
+        
+        # scale the environmental states to range (-1, 1)
         scaled_target_speed = 2 * (self.target_init_speed / self.target_max_speed - 0.5)
         scaled_subject_dis = 2 * (subject_init_distance / self.subject_max_position - 0.5)
         self.scaled_state = (1, scaled_target_speed, scaled_subject_dis, -1)
         
+        # calculate estimated total time for target to reach the interception point
+        most_likely_TTCS = (self.time_to_change_speed_min + self.time_to_change_speed_max) * 0.5
+        most_likely_FS = self.target_fspeed_mean
+        temp_term = self.target_init_distance - most_likely_TTCS * self.target_init_speed
+        temp_term -= (self.target_init_speed + most_likely_FS) * self.speed_change_duration * 0.5
+        target_init_TTC = temp_term / most_likely_FS + (most_likely_TTCS + self.speed_change_duration)
+        # calculate required speed for subject based on initial conditions
+        estimated_speed = subject_init_distance / target_init_TTC
+
+        self.info = {'has_changed_speed' : has_changed_speed,
+                     'estimated_speed' : estimated_speed}
+
         return np.asarray(self.scaled_state, dtype=np.float32)
 
 
