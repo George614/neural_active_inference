@@ -58,7 +58,7 @@ class InterceptionEnv(gym.Env):
          Episode length is greater than 6 seconds (180 steps @ 30FPS).
     '''
 
-    def __init__(self, target_speed_idx=0, approach_angle_idx=3, return_prior=False):
+    def __init__(self, target_speed_idx=0, approach_angle_idx=3, return_prior=False, use_slope=False):
         self.subject_min_position = 0.0
         self.subject_max_position = 30.0
         self.approach_angle_list = [135, 140, 145, 90]
@@ -83,6 +83,7 @@ class InterceptionEnv(gym.Env):
         self.viewer = None
         self.action_type = 'speed'  # 'acceleration' or 'speed'
         self.return_prior = return_prior
+        self.use_slope = use_slope  # whether to use slope of ramp to estimate target's fspeed
 
         if self.action_type == 'speed':
             # instantaneous speed change
@@ -117,21 +118,40 @@ class InterceptionEnv(gym.Env):
                 action), "%r (%s) invalid" % (action, type(action))
             self.action = action
         target_dis, target_speed, subject_dis, subject_speed = self.state
-        has_changed_speed = self.info['has_changed_speed']
+        speed_phase = self.info['speed_phase']
         self.time += 1.0 / self.FPS
+        self.est_time_to_ramp -= 1.0 / self.FPS
         
-        # handle the target changing its speed
-        if self.time >= self.time_to_change_speed and not has_changed_speed:
-            has_changed_speed = 1
-        if has_changed_speed:
+        # handle the target changing its speed, phase 0 is before the ramp
+        if self.time >= self.time_to_change_speed and speed_phase == 0:
+            speed_phase = 1  # during the ramp
+        if speed_phase == 1 and target_speed == self.target_final_speed:
+            speed_phase = 2  # after the ramp
+        if speed_phase == 1:
             speed_proportion = (
                 self.time - self.time_to_change_speed) / self.speed_change_duration
             target_speed = min(self.target_final_speed, speed_proportion * (
                 self.target_final_speed - self.target_init_speed) + self.target_init_speed)
 
         # calculate estimated subject speed based on status of target changing its speed
-        if self.time < self.time_finish_speed_change:
-            estimated_speed = self.info['estimated_speed']
+        if speed_phase == 0:
+            if self.est_time_to_ramp < 0:  # speed change is later than the estimation
+                self.est_time_to_ramp = 1.0 / self.FPS # assume target will change speed in next frame
+            target_dis_to_ramp = target_speed * self.est_time_to_ramp
+            target_dis_during_ramp = (target_speed + self.target_fspeed_mean) * 0.5 * self.speed_change_duration
+            target_TTC_last_part = (target_dis - target_dis_to_ramp - target_dis_during_ramp) / self.target_fspeed_mean
+            estimated_speed = subject_dis / (target_TTC_last_part + self.speed_change_duration + self.est_time_to_ramp)
+        elif speed_phase == 1:
+            # when speed change is ealier than the estimation, i.e. self.est_time_to_ramp > 0,
+            # ignore est_time_to_ramp
+            time_past_in_ramp = self.time - self.time_to_change_speed
+            if self.use_slope:
+                est_target_fspeed = self.target_final_speed
+            else:
+                est_target_fspeed = self.target_fspeed_mean
+            target_dis_ramp = (target_speed + est_target_fspeed) * 0.5 * (self.speed_change_duration - time_past_in_ramp)
+            target_TTC_last_part = (target_dis - target_dis_ramp) / est_target_fspeed
+            estimated_speed = subject_dis / (target_TTC_last_part + self.speed_change_duration - time_past_in_ramp)
         else:
             estimated_speed = subject_dis / (target_dis / target_speed)
 
@@ -168,6 +188,7 @@ class InterceptionEnv(gym.Env):
         elif self.action_type == 'acceleration': # choose acceleration
             subject_speed += self.action_acceleration_mappings[action]
         
+        # update observations
         subject_speed = np.clip(subject_speed, 0, self.subject_speed_max)
         subject_dis -= subject_speed / self.FPS
         subject_dis = np.clip(subject_dis, 0, self.subject_max_position)
@@ -182,7 +203,7 @@ class InterceptionEnv(gym.Env):
         reward = 1 if target_subject_dis <= self.intercept_threshold else 0
 
         self.state = (target_dis, target_speed, subject_dis, subject_speed)
-        self.info = {'has_changed_speed' : has_changed_speed,
+        self.info = {'speed_phase' : speed_phase,
                      'estimated_speed' : estimated_speed}
         # scale the observations to range (-1, 1)
         scaled_target_dis = 2 * (target_dis / self.target_init_distance - 0.5)
@@ -209,11 +230,10 @@ class InterceptionEnv(gym.Env):
             self.target_max_speed
         )
         self.time = 0.0
-        self.time_finish_speed_change = self.time_to_change_speed + self.speed_change_duration
         subject_init_distance = self.np_random.uniform(
             low=self.subject_init_distance_min, high=self.subject_init_distance_max)
         subject_init_speed = 0.0
-        has_changed_speed = 0
+        speed_phase = 0  # before the ramp
         # estimated_speed = subject_init_distance / (self.target_init_distance / self.target_init_speed)
         target_subject_dis = np.sqrt(np.square(self.target_init_distance) + np.square(
             subject_init_distance) - 2 * self.target_init_distance * subject_init_distance * np.cos(self.approach_angle * np.pi / 180))
@@ -226,23 +246,24 @@ class InterceptionEnv(gym.Env):
         self.scaled_state = (1, scaled_target_speed, scaled_subject_dis, -1)
         
         # calculate estimated total time for target to reach the interception point
-        most_likely_TTCS = (self.time_to_change_speed_min + self.time_to_change_speed_max) * 0.5
-        most_likely_FS = self.target_fspeed_mean
-        temp_term = self.target_init_distance - most_likely_TTCS * self.target_init_speed
-        temp_term -= (self.target_init_speed + most_likely_FS) * self.speed_change_duration * 0.5
-        target_init_TTC = temp_term / most_likely_FS + (most_likely_TTCS + self.speed_change_duration)
-        # calculate required speed for subject based on initial conditions
-        estimated_speed = subject_init_distance / target_init_TTC
+        self.most_likely_TTCS = (self.time_to_change_speed_min + self.time_to_change_speed_max) * 0.5
+        self.est_time_to_ramp = self.most_likely_TTCS # this variable gets updated per step
+        # most_likely_FS = self.target_fspeed_mean
+        # temp_term = self.target_init_distance - most_likely_TTCS * self.target_init_speed
+        # temp_term -= (self.target_init_speed + most_likely_FS) * self.speed_change_duration * 0.5
+        # target_init_TTC = temp_term / most_likely_FS + (most_likely_TTCS + self.speed_change_duration)
+        # # calculate required speed for subject based on initial conditions
+        # estimated_speed = subject_init_distance / target_init_TTC
 
-        self.info = {'has_changed_speed' : has_changed_speed,
-                     'estimated_speed' : estimated_speed}
+        self.info = {'speed_phase' : speed_phase,
+                     'estimated_speed' : None}
 
         return np.asarray(self.scaled_state, dtype=np.float32)
 
 
     def render(self, mode='human'):
         target_dis, target_speed, subject_dis, subject_speed = self.state
-        has_changed_speed = self.info['has_changed_speed']
+        speed_phase = self.info['speed_phase']
         estimated_speed = self.info['estimated_speed']
         speed_diff = subject_speed - estimated_speed
         # scale = (1 / (self.intercept_threshold / 2)) * 4
@@ -319,12 +340,12 @@ class InterceptionEnv(gym.Env):
                 rendering.Transform(translation=(5, info_top)))
             self.viewer.add_geom(self.target_speed_label)
 
-            self.has_changed_speed_label = text_rendering.Text(
-                'Has Changed Speed: ' + ('Yes' if has_changed_speed else 'No'))
-            info_top -= self.has_changed_speed_label.text.content_height
-            self.has_changed_speed_label.add_attr(
+            self.speed_phase_label = text_rendering.Text(
+                'Speed Changing Phase: %d' % speed_phase)
+            info_top -= self.speed_phase_label.text.content_height
+            self.speed_phase_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
-            self.viewer.add_geom(self.has_changed_speed_label)
+            self.viewer.add_geom(self.speed_phase_label)
 
             self.subject_dis_label = text_rendering.Text(
                 'Subject Distance: %.2f' % subject_dis)
@@ -365,8 +386,8 @@ class InterceptionEnv(gym.Env):
         self.target_distance_label.set_text(
             'Target Distance: %.2f' % target_dis)
         self.target_speed_label.set_text('Target Speed: %.2f' % target_speed)
-        self.has_changed_speed_label.set_text(
-            'Has Changed Speed: ' + ('Yes' if has_changed_speed else 'No'))
+        self.speed_phase_label.set_text(
+            'Speed Changing Phase: %d' % speed_phase)
         self.subject_dis_label.set_text(
             'Subject Distance: %.2f' % subject_dis)
         self.subject_speed_label.set_text(
@@ -395,12 +416,12 @@ class InterceptionEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    test = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3)
+    test = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior=True)
     test.reset()
     frame_duration = 1 / test.FPS
     # test.render()
     prev_time = time.time()
-    while not test.step(1)[2]:
+    while not test.step()[2]:
         time.sleep(max(frame_duration - (time.time() - prev_time), 0))
         prev_time = time.time()
         test.render()
