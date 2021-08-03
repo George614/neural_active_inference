@@ -377,8 +377,8 @@ for trial in range(n_trials):
 
         if loss_efe is not None:
             print("-----------------------------------------------------------------")
-            print("frame {0}, L.model = {1}, L.efe = {2}  eps = {3}".format(frame_idx, loss_model.numpy(),
-                  (loss_efe/efe_N).numpy(), pplModel.epsilon.numpy()))
+            print("frame {0}, L.model = {1}, L.efe = {2}  eps = {3}, rho = {4}".format(frame_idx, loss_model.numpy(),
+                  (loss_efe/efe_N).numpy(), pplModel.epsilon.numpy(), pplModel.rho.numpy()))
         
         ### evaluate the PPL model using a number of episodes ###
         if eval_model is True:
