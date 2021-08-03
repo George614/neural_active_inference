@@ -32,6 +32,7 @@ class QAIModel:
         self.instru_term = args.getArg("instru_term")
         self.normalize_signals = (args.getArg("normalize_signals").strip().lower() == 'true')
         self.seed = int(args.getArg("seed"))
+        self.rho = float(args.getArg("rho"))
         self.EFE_bound = 1.0
         self.max_R_ti = 1.0
         self.min_R_ti = 0.01 #-1.0 for GLL #0.01
@@ -78,7 +79,7 @@ class QAIModel:
 
         self.epsilon = tf.Variable(1.0, trainable=False)  # epsilon greedy parameter
         self.gamma = tf.Variable(1.0, trainable=False)  # gamma weighting factor for balance KL-D on transition vs unit Gaussian
-        self.rho = tf.Variable(1.0, trainable=False)  # weight term on the epistemic value
+        self.rho = tf.Variable(self.rho, trainable=False)  # weight term on the epistemic value
         self.tau = -1 # if set to 0, then no Polyak averaging is used for target network
         self.update_target()
 
@@ -173,7 +174,7 @@ class QAIModel:
             # regularization for weights
             loss_l2 = 0.0
             if self.l2_reg > 0.0:
-                loss_l2 = tf.add_n([tf.nn.l2_loss(var) for var in self.param_var if 'W' in var.name]) * self.l2_reg
+                loss_l2 = tf.add_n([tf.nn.l2_loss(var) for var in self.transition.param_var if 'W' in var.name]) * self.l2_reg
             ## compute full loss ##
             loss_model = loss_reconst + loss_l2
             
