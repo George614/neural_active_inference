@@ -119,7 +119,8 @@ use_per_buffer = args.getArg("use_per_buffer").strip().lower() == 'true'
 equal_replay_batches = args.getArg("equal_replay_batches").strip().lower() == 'true'
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
-use_env_prior = args.getArg("env_prior").strip().lower() == 'true'
+env_prior = args.getArg("env_prior")
+use_env_prior = True if args.hasArg('env_prior') else False
 seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
 epsilon_start = float(args.getArg("epsilon_start")) #0.025 #0.9
@@ -155,7 +156,7 @@ learning_rate_decay = float(args.getArg("learning_rate_decay"))
 opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
 
 # env = gym.make(args.getArg("env_name"))
-env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior=use_env_prior)
+env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
 # set seeds
 tf.random.set_seed(seed)
 np.random.seed(seed)
@@ -377,8 +378,8 @@ for trial in range(n_trials):
 
         if loss_efe is not None:
             print("-----------------------------------------------------------------")
-            print("frame {0}, L.model = {1}, L.efe = {2}  eps = {3}".format(frame_idx, loss_model.numpy(),
-                  (loss_efe/efe_N).numpy(), pplModel.epsilon.numpy()))
+            print("frame {0}, L.model = {1}, L.efe = {2}  eps = {3}, rho = {4}".format(frame_idx, loss_model.numpy(),
+                  (loss_efe/efe_N).numpy(), pplModel.epsilon.numpy(), pplModel.rho.numpy()))
         
         ### evaluate the PPL model using a number of episodes ###
         if eval_model is True:
@@ -431,9 +432,9 @@ for trial in range(n_trials):
                 rho = rho_by_episode(ep_idx - start_ep)
                 pplModel.rho.assign(rho)
         
-        if reward_window_mean > 0.5:
-            agent_fname = "{0}trial_{1}_epd_{2}.agent".format(out_dir, trial, ep_idx)
-            save_object(pplModel, fname=agent_fname)
+        # if reward_window_mean > 0.5:
+        #     agent_fname = "{0}trial_{1}_epd_{2}.agent".format(out_dir, trial, ep_idx)
+        #     save_object(pplModel, fname=agent_fname)
 
     env.close()
     all_win_mean.append(np.asarray(trial_win_mean))

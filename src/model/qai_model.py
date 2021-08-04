@@ -33,6 +33,7 @@ class QAIModel:
         self.normalize_signals = (args.getArg("normalize_signals").strip().lower() == 'true')
         self.seed = int(args.getArg("seed"))
         self.rho = float(args.getArg("rho"))
+        self.use_prior_space = args.getArg("use_prior_space").strip().lower() == 'true'
         self.EFE_bound = 1.0
         self.max_R_ti = 1.0
         self.min_R_ti = 0.01 #-1.0 for GLL #0.01
@@ -112,13 +113,19 @@ class QAIModel:
                 ### instrumental term ###
                 R_ti = None
                 if self.instru_term == "prior_local":
-                    if obv_prior is None:
+                    if obv_prior is None:  # use learned / emperical prior model
                         o_prior_mu, o_prior_std, _ = self.prior.predict(obv_t)
                         # difference between preferred future and actual future, i.e. instrumental term
                         #R_ti = -1.0 * g_nll(obv_next, o_prior_mu, o_prior_std * o_prior_std, keep_batch=True)
                         R_ti = -1.0 * mse(x_true=obv_next, x_pred=o_prior_mu, keep_batch=True)
                     else:
-                        R_ti = -1.0 * mse(x_true=obv_next, x_pred=obv_prior, keep_batch=True)
+                        if self.use_prior_space: # calculate instrumental term in prior space
+                            error_prior_space = tf.reduce_sum(action * obv_prior, axis=1, keepdims=True)
+                            # R_ti = -1.0 * mse(error_prior_space, tf.zeros_like(error_prior_space), keep_batch=True)
+                            error_prior = tf.losses.huber(error_prior_space, 0.0)
+                            R_ti = -1.0 * tf.expand_dims(error_prior, axis=1)
+                        else:  # calculate instrumental term in observation space
+                            R_ti = -1.0 * mse(x_true=obv_next, x_pred=obv_prior, keep_batch=True)
                     if self.normalize_signals is True:
                         a = -self.EFE_bound
                         b = self.EFE_bound

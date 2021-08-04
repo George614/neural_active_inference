@@ -58,7 +58,7 @@ class InterceptionEnv(gym.Env):
          Episode length is greater than 6 seconds (180 steps @ 30FPS).
     '''
 
-    def __init__(self, target_speed_idx=0, approach_angle_idx=3, return_prior=False, use_slope=False):
+    def __init__(self, target_speed_idx=0, approach_angle_idx=3, return_prior=None, use_slope=False):
         self.subject_min_position = 0.0
         self.subject_max_position = 30.0
         self.approach_angle_list = [135, 140, 145, 90]
@@ -156,7 +156,7 @@ class InterceptionEnv(gym.Env):
             estimated_speed = subject_dis / (target_dis / target_speed)
 
         if self.action_type == 'speed': # choose pedal position
-            if self.return_prior:
+            if self.return_prior is not None:
                 # use prior preference to choose pedeal speed then calculate the 4D observations
                 prior_speed_diffs = []
                 for prior_action in range(self.action_space.n):
@@ -213,8 +213,14 @@ class InterceptionEnv(gym.Env):
         self.scaled_state = (scaled_target_dis, scaled_target_speed, scaled_subject_dis, scaled_subject_speed)
         self.scaled_state = np.asarray(self.scaled_state, dtype=np.float32)
 
-        if self.return_prior:
-            return self.scaled_state, reward, done, prior_scaled_obv, self.info
+        if self.return_prior is not None:
+            if self.return_prior == 'prior_obv':
+                return self.scaled_state, reward, done, prior_scaled_obv, self.info
+            elif self.return_prior == 'prior_error':
+                prior_error = np.asarray(prior_speed_diffs, dtype=np.float32)
+                return self.scaled_state, reward, done, prior_error, self.info
+            else:
+                raise Exception("Prior type {} is not valid!".format(self.return_prior))
 
         return self.scaled_state, reward, done, self.info
 
