@@ -33,7 +33,7 @@ class QAIModel:
         self.normalize_signals = (args.getArg("normalize_signals").strip().lower() == 'true')
         self.seed = int(args.getArg("seed"))
         self.rho = float(args.getArg("rho"))
-        self.use_prior_space = args.getArg("use_prior_space").strip().lower() == 'true'
+        self.use_prior_space = args.getArg("env_prior").strip().lower() == 'prior_error'
         self.EFE_bound = 1.0
         self.max_R_ti = 1.0
         self.min_R_ti = 0.01 #-1.0 for GLL #0.01

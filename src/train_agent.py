@@ -109,6 +109,7 @@ prob_alpha = 0.6
 batch_size = int(args.getArg("batch_size")) #256
 dim_a = int(args.getArg("dim_a"))
 dim_o = int(args.getArg("dim_o"))
+f_speed_idx = int(args.getArg("f_speed_idx"))
 grad_norm_clip = float(args.getArg("grad_norm_clip")) #1.0 #10.0
 clip_type = args.getArg("clip_type")
 log_interval = 4
@@ -119,8 +120,11 @@ use_per_buffer = args.getArg("use_per_buffer").strip().lower() == 'true'
 equal_replay_batches = args.getArg("equal_replay_batches").strip().lower() == 'true'
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
-env_prior = args.getArg("env_prior")
 use_env_prior = True if args.hasArg('env_prior') else False
+if use_env_prior:
+    env_prior = args.getArg("env_prior")
+else:
+    env_prior = None
 seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
 epsilon_start = float(args.getArg("epsilon_start")) #0.025 #0.9
@@ -156,7 +160,7 @@ learning_rate_decay = float(args.getArg("learning_rate_decay"))
 opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
 
 # env = gym.make(args.getArg("env_name"))
-env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
+env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
 # set seeds
 tf.random.set_seed(seed)
 np.random.seed(seed)

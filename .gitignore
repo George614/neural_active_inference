@@ -130,3 +130,5 @@ results/
 data/
 tmp/
 exp/
+
+*.png
