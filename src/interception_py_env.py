@@ -82,7 +82,7 @@ class InterceptionEnv(gym.Env):
         self.lag_coefficient = float(1.0 / self.FPS)
         self.viewer = None
         self.action_type = 'speed'  # 'acceleration' or 'speed'
-        self.return_prior = return_prior
+        self.return_prior = return_prior  # type of prior to use: either in obv space or prior space
         self.use_slope = use_slope  # whether to use slope of ramp to estimate target's fspeed
 
         if self.action_type == 'speed':
@@ -140,7 +140,8 @@ class InterceptionEnv(gym.Env):
             target_dis_to_ramp = target_speed * self.est_time_to_ramp
             target_dis_during_ramp = (target_speed + self.target_fspeed_mean) * 0.5 * self.speed_change_duration
             target_TTC_last_part = (target_dis - target_dis_to_ramp - target_dis_during_ramp) / self.target_fspeed_mean
-            estimated_speed = subject_dis / (target_TTC_last_part + self.speed_change_duration + self.est_time_to_ramp)
+            target_TTC = target_TTC_last_part + self.speed_change_duration + self.est_time_to_ramp
+            estimated_speed = subject_dis / target_TTC
         elif speed_phase == 1:
             # when speed change is ealier than the estimation, i.e. self.est_time_to_ramp > 0,
             # ignore est_time_to_ramp
@@ -151,9 +152,11 @@ class InterceptionEnv(gym.Env):
                 est_target_fspeed = self.target_fspeed_mean
             target_dis_ramp = (target_speed + est_target_fspeed) * 0.5 * (self.speed_change_duration - time_past_in_ramp)
             target_TTC_last_part = (target_dis - target_dis_ramp) / est_target_fspeed
-            estimated_speed = subject_dis / (target_TTC_last_part + self.speed_change_duration - time_past_in_ramp)
+            target_TTC = target_TTC_last_part + self.speed_change_duration - time_past_in_ramp
+            estimated_speed = subject_dis / target_TTC
         else:
-            estimated_speed = subject_dis / (target_dis / target_speed)
+            target_TTC = target_dis / target_speed
+            estimated_speed = subject_dis / target_TTC
 
         if self.action_type == 'speed': # choose pedal position
             if self.return_prior is not None:
@@ -204,7 +207,8 @@ class InterceptionEnv(gym.Env):
 
         self.state = (target_dis, target_speed, subject_dis, subject_speed)
         self.info = {'speed_phase' : speed_phase,
-                     'estimated_speed' : estimated_speed}
+                     'estimated_speed' : estimated_speed,
+                     'target_TTC' : target_TTC}
         # scale the observations to range (-1, 1)
         scaled_target_dis = 2 * (target_dis / self.target_init_distance - 0.5)
         scaled_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
