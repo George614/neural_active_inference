@@ -15,9 +15,11 @@ def calc_window_mean(window):
     return mu
 
 parent_dir = "D:/Projects/neural_active_inference/exp/interception/qai/"
-exp_dir_list = ["pureReward_mse_4D_obv_w_speedchg_DQNhyperP_512net_biasInit_noL2Reg_relu_learnSche_3k",
-				"Reward_posRte_mse_4D_obv_w_speedchg_DQNhyperP_512net_biasInit_noL2Reg_relu_learnSche_3k",
-				"negRti_posRte_mse_4D_obv_w_speedchg_DQNhyperP_512net_biasInit_noL2Reg_relu_learnSche_3k"]
+exp_dir_list = ["negRti_posRte_mse_4D_obv_w_speedchg_newPrior_noSlope_DQNhyperP_512net_noL2Reg_relu_learnSche_3k",
+				"negRti_posRte_rho0.5_mse_4D_obv_w_speedchg_newPrior_DQNhyperP_512net_noL2Reg_relu_learnSche_3k",
+				"negRti_posRte_rho0.25_mse_4D_obv_w_speedchg_newPrior_DQNhyperP_512net_noL2Reg_relu_learnSche_3k",
+				"negRti_posRte_rho0.125_mse_4D_obv_w_speedchg_newPrior_DQNhyperP_512net_noL2Reg_relu_learnSche_3k",
+				"negRti_noRte_mse_4D_obv_w_speedchg_newPrior_noSlope_DQNhyperP_512net_noL2Reg_relu_learnSche_3k"]
 input_dirs = [parent_dir + exp_dir for exp_dir in exp_dir_list]
 win_reward_np_list = []
 
@@ -46,22 +48,26 @@ for input_dir in input_dirs:
 fig, ax = plt.subplots()
 mean_rewards = np.mean(win_reward_np_list[0], axis=0)
 std_rewards = np.std(win_reward_np_list[0], axis=0)
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='red', label='DQN', linewidth=0.5)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='red', label='AIF_rho_1.0', linewidth=0.5)
 ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='pink', alpha=0.25)
 mean_rewards = np.mean(win_reward_np_list[1], axis=0)
 std_rewards = np.std(win_reward_np_list[1], axis=0)
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='blue', label='AIF_reward', linewidth=0.5)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='blue', label='AIF_rho_0.5', linewidth=0.5)
 ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='cyan', alpha=0.25)
 mean_rewards = np.mean(win_reward_np_list[2], axis=0)
 std_rewards = np.std(win_reward_np_list[2], axis=0)
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='green', label='AIF_local_prior', linewidth=0.5)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='green', label='AIF_rho_0.25', linewidth=0.5)
 ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='lime', alpha=0.25)
-# mean_rewards = np.mean(win_reward_np_list[3], axis=0)
-# std_rewards = np.std(win_reward_np_list[3], axis=0)
-# ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='purple', label='AIF_reward_expertBatch', linewidth=0.5)
-# ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='violet', alpha=0.25)
+mean_rewards = np.mean(win_reward_np_list[3], axis=0)
+std_rewards = np.std(win_reward_np_list[3], axis=0)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='purple', label='AIF_rho_0.125', linewidth=0.5)
+ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='violet', alpha=0.25)
+mean_rewards = np.mean(win_reward_np_list[4], axis=0)
+std_rewards = np.std(win_reward_np_list[4], axis=0)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='gold', label='AIF_rho_0.0', linewidth=0.5)
+ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='yellow', alpha=0.25)
 ax.legend(bbox_to_anchor=(0., 1.1, 1., .2), loc='lower left', fontsize='small', ncol=3, mode='expand', borderaxespad=0.)
 ax.set_ylabel("Rewards")
 ax.set_xlabel("Number of episodes")
 ax.set_title("Window-averaged rewards")
-fig.savefig(os.getcwd() + "/mean_win_rewards.png", dpi=200, bbox_inches="tight")
+fig.savefig(os.getcwd() + "/AIF_rho_compare.png", dpi=200, bbox_inches="tight")
