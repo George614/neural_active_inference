@@ -378,6 +378,9 @@ for trial in range(n_trials):
         #     pplModel.update_target()
 
         ### after each training episode is done ###
+        f_speed_idx = np.random.randint(3)
+        env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
+        env.seed(seed=seed)
         observation = env.reset()
 
         if loss_efe is not None:
