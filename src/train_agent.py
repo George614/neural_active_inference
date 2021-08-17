@@ -63,7 +63,7 @@ def create_optimizer(opt_type, eta, momentum=0.9, epsilon=1e-08):
 # read in configuration file and extract necessary variables/constants
 options, remainder = getopt.getopt(sys.argv[1:], '', ["cfg_fname=","gpu_id="])
 # Collect arguments from argv
-cfg_fname = "run_interception_ai.cfg"
+# cfg_fname = "run_interception_ai.cfg"
 use_gpu = True
 gpu_id = 0
 for opt, arg in options:
@@ -101,7 +101,7 @@ eval_model = (args.getArg("eval_model").strip().lower() == 'true')
 num_frames = 480000  # total number of training steps
 num_episodes = int(args.getArg("num_episodes")) #500 # 2000  # total number of training episodes
 test_episodes = 5  # number of episodes for testing
-target_update_freq = 600  # in terms of steps
+target_update_freq = int(args.getArg("target_update_step"))  # in terms of steps
 target_update_ep = int(args.getArg("target_update_ep")) #2  # in terms of episodes
 buffer_size = int(args.getArg("buffer_size")) #200000 # 100000
 learning_start = int(args.getArg("learning_start"))
@@ -127,11 +127,11 @@ else:
     env_prior = None
 seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
-epsilon_start = float(args.getArg("epsilon_start")) #0.025 #0.9
-epsilon_final = 0.02
+epsilon_start = float(args.getArg("epsilon_start"))
+epsilon_final = float(args.getArg("epsilon_final"))
 # epsilon_decay = num_frames / 20
 # epsilon_by_frame = Exponential_schedule(epsilon_start, epsilon_final, epsilon_decay)
-epsilon_by_frame = Linear_schedule(epsilon_start, epsilon_final, num_frames * 0.2)
+epsilon_by_frame = Linear_schedule(epsilon_start, epsilon_final, num_frames * 0.2) # linear schedule gives more exploration
 # gamma linear schedule for VAE regularization
 gamma_start = 0.01
 gamma_final = 0.99
@@ -159,8 +159,10 @@ lr  = tf.Variable( float(args.getArg("learning_rate")) )
 learning_rate_decay = float(args.getArg("learning_rate_decay"))
 opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
 
-# env = gym.make(args.getArg("env_name"))
-env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
+if args.getArg("env_name") == "InterceptionEnv":
+    env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
+else:
+    env = gym.make(args.getArg("env_name"))
 # set seeds
 tf.random.set_seed(seed)
 np.random.seed(seed)
@@ -370,17 +372,15 @@ for trial in range(n_trials):
             if frame_idx % target_update_freq == 0:
                 pplModel.update_target()
 
-                #if frame_idx % 200 == 0:
-                #    print("frame {}, loss_model {:.3f}, loss_efe {:.3f}".format(frame_idx, loss_model.numpy(), loss_efe.numpy()))
-
         pplModel.clear_state()
         # if ep_idx % target_update_ep == 0:
         #     pplModel.update_target()
 
         ### after each training episode is done ###
-        f_speed_idx = np.random.randint(3)
-        env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
-        env.seed(seed=seed)
+        if args.getArg("env_name") == "InterceptionEnv":
+            f_speed_idx = np.random.randint(3)
+            env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
+            env.seed(seed=seed)
         observation = env.reset()
 
         if loss_efe is not None:
@@ -439,10 +439,6 @@ for trial in range(n_trials):
                 rho = rho_by_episode(ep_idx - start_ep)
                 pplModel.rho.assign(rho)
         
-        # if reward_window_mean > 0.5:
-        #     agent_fname = "{0}trial_{1}_epd_{2}.agent".format(out_dir, trial, ep_idx)
-        #     save_object(pplModel, fname=agent_fname)
-
     env.close()
     all_win_mean.append(np.asarray(trial_win_mean))
     agent_fname = "{0}trial{1}".format(out_dir, trial)
