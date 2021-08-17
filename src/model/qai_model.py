@@ -47,7 +47,10 @@ class QAIModel:
         self.min_obv = -1.0
         self.efe_loss = str(args.getArg("efe_loss"))
 
-        hid_dims = [512, 512]
+        hid_dims = args.getArg("net_arch")
+        if hid_dims[0] == '[':
+            hid_dims = hid_dims[1:-1]
+        hid_dims = [int(s) for s in hid_dims.split(',')]
 
         ## transition dims ##
         trans_dims = [(self.dim_o + self.dim_a)]
