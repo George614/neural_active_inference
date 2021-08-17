@@ -149,9 +149,9 @@ beta_final = 1.0
 beta_ep_duration = 600
 beta_by_episode = Linear_schedule(beta_start, beta_final, beta_ep_duration)
 # training frenquency, update model weights after collecting every n transitions from env
-train_freq = 16
+train_freq = int(args.getArg("train_freq"))
 # apply n gradient steps in each training cycle
-gradient_steps = 8
+gradient_steps = int(args.getArg("gradient_steps"))
 
 ### initialize optimizer and environment ###
 opt_type = args.getArg("optimizer").strip().lower()
