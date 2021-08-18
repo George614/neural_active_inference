@@ -98,7 +98,7 @@ if args.hasArg("expert_data_path"):
     expert_data_path = args.getArg("expert_data_path") #"/home/agoroot/IdeaProjects/playful_learning/exp/mcar/expert/zoo-agent-mcar.npy"
 eval_model = (args.getArg("eval_model").strip().lower() == 'true')
 
-num_frames = 480000  # total number of training steps
+num_frames = 240000  # total number of training steps
 num_episodes = int(args.getArg("num_episodes")) #500 # 2000  # total number of training episodes
 test_episodes = 5  # number of episodes for testing
 target_update_freq = int(args.getArg("target_update_step"))  # in terms of steps
@@ -109,7 +109,6 @@ prob_alpha = 0.6
 batch_size = int(args.getArg("batch_size")) #256
 dim_a = int(args.getArg("dim_a"))
 dim_o = int(args.getArg("dim_o"))
-f_speed_idx = int(args.getArg("f_speed_idx"))
 grad_norm_clip = float(args.getArg("grad_norm_clip")) #1.0 #10.0
 clip_type = args.getArg("clip_type")
 log_interval = 4
@@ -120,7 +119,7 @@ use_per_buffer = args.getArg("use_per_buffer").strip().lower() == 'true'
 equal_replay_batches = args.getArg("equal_replay_batches").strip().lower() == 'true'
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
-use_env_prior = True if args.hasArg('env_prior') else False
+use_env_prior = False if args.getArg("env_prior").strip().lower() == 'none' else True
 if use_env_prior:
     env_prior = args.getArg("env_prior")
 else:
@@ -160,6 +159,7 @@ learning_rate_decay = float(args.getArg("learning_rate_decay"))
 opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
 
 if args.getArg("env_name") == "InterceptionEnv":
+    f_speed_idx = int(args.getArg("f_speed_idx"))
     env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
 else:
     env = gym.make(args.getArg("env_name"))
