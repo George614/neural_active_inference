@@ -9,7 +9,6 @@ import gym
 from gym import wrappers
 from utils import parse_int_list, mse, save_object, g_nll_from_logvar, load_object, g_nll
 from prob_mlp import ProbMLP
-#from replay_buffer import ReplayBuffer
 from config import Config
 
 """
@@ -18,33 +17,30 @@ Trains the prior (preference) model for use with the proposed QAIModel agent.
 @author Alexander G. Ororbia
 """
 
-def create_data_lists(expert_batch_fname, n_train): #n_test):
+def create_data_lists(expert_batch_fname):
     """
-        Axis Meaning for numpy expert demo data
-        0-1  o_t
-        2    a_t
-        3    r_t
-        4-5  o_t+1
-        6    done
+        Contents of numpy expert demo data:
+        (o_t, a_t, r_t, o_t+1, done)
     """
     print(" >> Loading expert demo data: ",expert_batch_fname)
     all_data = np.load(expert_batch_fname, allow_pickle=True)
-    idx_done = np.where(all_data[:, 6] == 1)[0]
+    idx_done = np.where(all_data[:, -1] == 1)[0]
     idx_done = idx_done - 1  # fix error on next_obv when done in original data
-    mask = np.not_equal(all_data[:, 6], 1)
+    mask = np.not_equal(all_data[:, -1], 1)
     for idx in idx_done:
-        all_data[idx, 6] = 1
+        all_data[idx, -1] = 1
     all_data = all_data[mask]
+    n_train = len(all_data) * 0.7
 
     train = []
     test = []
     for s in range(all_data.shape[0]):
         row_s = all_data[s,:]
-        o_t = row_s[0:2]
-        a_t = int( row_s[2] )
-        r_t = float( row_s[3] )
-        o_tp1 = row_s[4:6]
-        D_t = row_s[6]
+        o_t = row_s[0:obs_dim]
+        a_t = int(row_s[obs_dim])
+        r_t = float(row_s[obs_dim+1])
+        o_tp1 = row_s[obs_dim+2:-1]
+        D_t = row_s[-1]
         if float(D_t) < 1.0:
             if len(train) < n_train: # dump into train buffer
                 train.append((o_t, o_tp1, r_t, a_t, D_t))
@@ -117,6 +113,7 @@ data_fname = args.getArg("data_fname")
 wght_sd = float(args.getArg("wght_sd"))
 act_fun = args.getArg("act_fun")
 z_dims = args.getArg("z_dims")
+obs_dim = int(args.getArg("dim_o"))
 z_dims = parse_int_list(z_dims)
 init_type = args.getArg("init_type")
 model_variance = (args.getArg("model_variance").strip().lower() == 'true')
@@ -130,16 +127,14 @@ l2_reg = float(args.getArg("l2_reg"))
 param_radius = float(args.getArg("param_radius"))
 update_radius = float(args.getArg("update_radius"))
 batch_size = int(args.getArg("batch_size"))
-n_train = int(args.getArg("n_train"))
 use_log_form = (args.getArg("use_log_form").strip().lower() == 'true')
 
 ################################################################################
 # set up data and prior model
 ################################################################################
-trainset, testset = create_data_lists(data_fname, n_train)
+trainset, testset = create_data_lists(data_fname)
 print(" -> Train.length = {0}  Test.length = {1}".format(len(trainset),len(testset)))
 
-obs_dim = testset[0][0].shape[0]
 prior_dims = [obs_dim]
 prior_dims = prior_dims + z_dims
 prior_dims.append(obs_dim)
