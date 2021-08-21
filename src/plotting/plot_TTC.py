@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Read and plot the results of Time-To-Contacts for different target initial 
+speeds for the interception task.
+
+@author: Zhizhuo (George) Yang
+"""
 import os
 import numpy as np
 import matplotlib.pyplot as plt

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Aug  2 11:03:17 2021
+Test the designed prior function on the interception task directly (choose 
+the action by prior error) and plot the rewards.
 
-@author: George
+@author: Zhizhuo (George) Yang
 """
 import os
 import numpy as np

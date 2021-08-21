@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+"""
+Loaded trained agents then record their Time-To-Contacts (TTC) 
+on the interception task under different target initial
+speeds. Also record TTCs for the designed prior function.
+
+@author: Zhizhuo (George) Yang
+"""
 import os
 import logging
 import sys

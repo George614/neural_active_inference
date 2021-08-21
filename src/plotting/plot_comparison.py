@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+"""
+Read episodic rewards from given folders and plot window-averaged
+rewards with mean (solid line) and std (shade). For comparison
+purpose, different conditions are color coded.
+
+@author: Zhizhuo (George) Yang
+"""
 import os
 import numpy as np
 from pathlib import Path

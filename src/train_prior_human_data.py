@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Train the local prior preference model with human data (on interception) to use 
+with the proposed QAIModel agent.
+
+@author: Zhizhuo (George) Yang
+"""
 import os
 import logging
 import sys, getopt, optparse
@@ -12,10 +19,6 @@ from utils import parse_int_list, mse, save_object, g_nll_from_logvar, load_obje
 from prob_mlp import ProbMLP
 from config import Config
 
-"""
-Trains the prior (preference) model for use with the proposed QAIModel agent.
-
-"""
 
 def eval_model(model, test_set, mem_batch_size):
     """

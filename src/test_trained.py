@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+Loaded a trained agent and test it under given conditions.
+Options include:
+1. Generating a video of the trajectory for the test episode.
+2. Generating a video of the EFE values for each action throughout the episode.
+3. Combining 2 videos generated previously into a synced gif.
+
+@author: Zhizhuo (George) Yang
+"""
 import os
 import logging
 import sys

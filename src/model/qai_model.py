@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+"""
+A Q-learning interpretation of active inference.
+Generative model/likelihood and approximate posterior assumed to be
+identity matrices and thus are cancelled out in this implementation
+
+@author: Alexander G. Ororbia, Zhizhuo (George) Yang
+"""
 import tensorflow as tf
 import numpy as np
 import sys
@@ -9,13 +17,6 @@ from prob_mlp import ProbMLP
 from config import Config
 
 class QAIModel:
-    """
-        A Q-learning interpretation of active inference.
-        Generative model/likelihood and approximate posterior assumed to be
-        identity matrices and thus are cancelled out in this implementation
-
-        @author Alexander G. Ororbia
-    """
     def __init__(self, prior, args):
         self.prior = prior
         self.args = args
