@@ -18,7 +18,9 @@ from utils import load_object
 sys.path.insert(0, 'model/')
 from interception_py_env import InterceptionEnv
 import matplotlib.pyplot as plt
+from multiprocessing import Pool
 from pathlib import Path
+import functools
 
 approach_angle_idx = 3
 num_runs = 5  # number of episodes for testing each specific config
@@ -62,48 +64,69 @@ def record_Rte(target_speed_idx, qaiModel=None):
     return Rte_avg
 
 
+def merge_and_sort_dicts(dict_list):
+    result = {}
+    for dictionary in dict_list:
+        result.update(dictionary)
+    dic = {}
+    for k in sorted(result):
+       dic[k] = result[k]
+    return dic
+
+
+def record_Rte_all_trials(model_save_path, speed_idx, epd_idx):
+    model_dir = Path(model_save_path)
+    num_trials = len(list(model_dir.glob("*.npy")))
+    Rte_all_trials = []
+    for trial in range(num_trials):
+        qaiModel = load_AIF_agent(trial, epd_idx, model_save_path)
+        Rte_snapshot = record_Rte(speed_idx, qaiModel)
+        Rte_all_trials.append(Rte_snapshot)
+    epd_Rte_mean = np.mean(Rte_all_trials)
+    return {epd_idx: epd_Rte_mean}
+    
+    
 def record_Rte_epd_means(model_save_path, speed_idx):
     """ 
     Averaged episodic epistemic value across all trials at interval
     of 50 episodes during the training progress for a given target 
     initial speed index.
     """
-    model_dir = Path(model_save_path)
-    num_trials = len(list(model_dir.glob("*.npy")))
-    Rte_epd_means = []
-    for epd_idx in range(0, 2001, 50):
-        Rte_all_trials = []
-        for trial in range(num_trials):
-            qaiModel = load_AIF_agent(trial, epd_idx, model_save_path)
-            Rte_snapshot = record_Rte(speed_idx, qaiModel)
-            Rte_all_trials.append(Rte_snapshot)
-        epd_Rte_mean = np.mean(Rte_all_trials)
-        Rte_epd_means.append(epd_Rte_mean)
-    return Rte_epd_means
+    n_snapshots = 2001//50 
+    n_processes = min(n_snapshots, 4)
+    with Pool(processes=n_processes) as pool:
+        Rte_epd_means = pool.map(functools.partial(record_Rte_all_trials, model_save_path, speed_idx), range(50, 2001, 50))
+    Rte_epd_means_dict = merge_and_sort_dicts(Rte_epd_means)
+
+    return Rte_epd_means_dict
 
 
-# run the AIF agents trained separately with different target initial speeds
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_fspeedIdx0_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
-Rte_epd_means_speed_0 = record_Rte_epd_means(model_save_path, 0)
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_fspeedIdx1_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
-Rte_epd_means_speed_1 = record_Rte_epd_means(model_save_path, 1)
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_fspeedIdx2_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
-Rte_epd_means_speed_2 = record_Rte_epd_means(model_save_path, 2)
-# run the AIF agent trained with different target initial speeds all together
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_allSpeeds_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
-Rte_epd_means_allSpeed_0 = record_Rte_epd_means(model_save_path, 0)
-Rte_epd_means_allSpeed_1 = record_Rte_epd_means(model_save_path, 1)
-Rte_epd_means_allSpeed_2 = record_Rte_epd_means(model_save_path, 2)
-#%% plot the averaged episodic epistemic value as training progresses
-fig, ax = plt.subplots()
-ax.plot(np.arange(50, 2001, 50), Rte_epd_means_speed_0[1:], alpha=1.0, color='red', label='separate_speedIdx_0', linewidth=0.5)
-ax.plot(np.arange(50, 2001, 50), Rte_epd_means_speed_1[1:], alpha=1.0, color='orange', label='separate_speedIdx_1', linewidth=0.5)
-ax.plot(np.arange(50, 2001, 50), Rte_epd_means_speed_2[1:], alpha=1.0, color='gold', label='separate_speedIdx_2', linewidth=0.5)
-ax.plot(np.arange(50, 2001, 50), Rte_epd_means_allSpeed_0[1:], alpha=1.0, color='green', label='together_speedIdx_0', linewidth=0.5)
-ax.plot(np.arange(50, 2001, 50), Rte_epd_means_allSpeed_1[1:], alpha=1.0, color='blue', label='together_speedIdx_1', linewidth=0.5)
-ax.plot(np.arange(50, 2001, 50), Rte_epd_means_allSpeed_2[1:], alpha=1.0, color='purple', label='together_speedIdx_2', linewidth=0.5)
-ax.legend(bbox_to_anchor=(0., 1.1, 1., .2), loc='lower left', fontsize='x-small', ncol=3, mode='expand', borderaxespad=0.)
-ax.set_ylabel("Epistemic value")
-ax.set_xlabel("Number of episodes trained")
-ax.set_title("Averaged episodic epistemic value for all initial target speeds")
-fig.savefig(os.getcwd() + "/epistemic_comparison.png", dpi=200, bbox_inches="tight")
+if __name__ == "__main__":
+    gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpu_devices:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    # run the AIF agents trained separately with different target initial speeds
+    model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_fspeedIdx0_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
+    Rte_epd_means_speed_0 = record_Rte_epd_means(model_save_path, 0)
+    model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_fspeedIdx1_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
+    Rte_epd_means_speed_1 = record_Rte_epd_means(model_save_path, 1)
+    model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_fspeedIdx2_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
+    Rte_epd_means_speed_2 = record_Rte_epd_means(model_save_path, 2)
+    # run the AIF agent trained with different target initial speeds all together
+    model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_allSpeeds_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
+    Rte_epd_means_allSpeed_0 = record_Rte_epd_means(model_save_path, 0)
+    Rte_epd_means_allSpeed_1 = record_Rte_epd_means(model_save_path, 1)
+    Rte_epd_means_allSpeed_2 = record_Rte_epd_means(model_save_path, 2)
+    #%% plot the averaged episodic epistemic value as training progresses
+    fig, ax = plt.subplots()
+    ax.plot(list(Rte_epd_means_speed_0.keys()), list(Rte_epd_means_speed_0.values()), color='red', label='separate_speedIdx_0', linewidth=0.5)
+    ax.plot(list(Rte_epd_means_speed_1.keys()), list(Rte_epd_means_speed_1.values()), color='orange', label='separate_speedIdx_1', linewidth=0.5)
+    ax.plot(list(Rte_epd_means_speed_2.keys()), list(Rte_epd_means_speed_2.values()), color='gold', label='separate_speedIdx_2', linewidth=0.5)
+    ax.plot(list(Rte_epd_means_allSpeed_0.keys()), list(Rte_epd_means_allSpeed_0.values()), color='green', label='together_speedIdx_0', linewidth=0.5)
+    ax.plot(list(Rte_epd_means_allSpeed_1.keys()), list(Rte_epd_means_allSpeed_1.values()), color='blue', label='together_speedIdx_1', linewidth=0.5)
+    ax.plot(list(Rte_epd_means_allSpeed_2.keys()), list(Rte_epd_means_allSpeed_2.values()), color='purple', label='together_speedIdx_2', linewidth=0.5)
+    ax.legend(bbox_to_anchor=(0., 1.1, 1., .2), loc='lower left', fontsize='x-small', ncol=3, mode='expand', borderaxespad=0.)
+    ax.set_ylabel("Epistemic value")
+    ax.set_xlabel("Number of episodes trained")
+    ax.set_title("Averaged episodic epistemic value for all initial target speeds")
+    fig.savefig(os.getcwd() + "/epistemic_comparison.png", dpi=200, bbox_inches="tight")
