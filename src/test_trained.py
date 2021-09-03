@@ -23,9 +23,9 @@ from utils import load_object
 sys.path.insert(0, 'model/')
 from interception_py_env import InterceptionEnv
 
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_newPrior_noSlope_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
+model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_allSpeeds_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
 env_id = 'interception' #'mcar' or 'interception'
-target_speed_idx = 2
+target_speed_idx = 0
 approach_angle_idx = 3
 env_prior = 'prior_error' # or prior_obv or None
 create_video = True
@@ -62,7 +62,7 @@ if plot_efe:
 
 observation = env.reset()
 if create_video:
-    video = cv2.VideoWriter(model_save_path+"trial_{}_epd_{}.avi".format(trial_num, episode_num), fourcc, float(FPS), (width, height))
+    video = cv2.VideoWriter(model_save_path+"trial_{}_epd_{}_tsidx_{}.avi".format(trial_num, episode_num, target_speed_idx), fourcc, float(FPS), (width, height))
 if plot_efe:
     efe_list = []
 prev_time = time.time()
@@ -134,20 +134,20 @@ if plot_efe:
     
     print("Creating animation for EFE values...")
     ani = FuncAnimation(fig, update, init_func=init, frames=len(efe_list), blit=False)
-    ani.save(os.path.join(model_save_path, "EFE_animation_trial_{}_epd_{}.avi".format(trial_num, episode_num)), fps=FPS, dpi=200)
+    ani.save(os.path.join(model_save_path, "EFE_animation_trial_{}_epd_{}_tsidx_{}.avi".format(trial_num, episode_num, target_speed_idx)), fps=FPS, dpi=200)
 
 env.close()
 print("Test simulation finished.")
 
 if combine_videos:
     import subprocess
-    cmd_traj = ["ffmpeg", "-i", "trial_{}_epd_{}.avi".format(trial_num, episode_num), "-vf",
-                "scale=640:-1", "trajectory_trial_{}_epd_{}.gif".format(trial_num, episode_num)]
-    cmd_efe = ["ffmpeg", "-i", "EFE_animation_trial_{}_epd_{}.avi".format(trial_num, episode_num),
-                "-vf", "scale=640:-1", "EFE_animation_trial_{}_epd_{}.gif".format(trial_num, episode_num)]
-    cmd_combine = ["ffmpeg", "-i", "trajectory_trial_{}_epd_{}.gif".format(trial_num, episode_num),
-                    "-i", "EFE_animation_trial_{}_epd_{}.gif".format(trial_num, episode_num),
-                    "-filter_complex", "vstack=inputs=2", "combined_trial_{}_epd_{}.gif".format(trial_num, episode_num)]
+    cmd_traj = ["ffmpeg", "-i", "trial_{}_epd_{}_tsidx_{}.avi".format(trial_num, episode_num, target_speed_idx), "-vf",
+                "scale=640:-1", "trajectory_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx)]
+    cmd_efe = ["ffmpeg", "-i", "EFE_animation_trial_{}_epd_{}_tsidx_{}.avi".format(trial_num, episode_num, target_speed_idx),
+                "-vf", "scale=640:-1", "EFE_animation_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx)]
+    cmd_combine = ["ffmpeg", "-i", "trajectory_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx),
+                    "-i", "EFE_animation_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx),
+                    "-filter_complex", "vstack=inputs=2", "combined_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx)]
     print("Creating combined animation gifs...")
     os.chdir(model_save_path)
     subprocess.run(cmd_traj)
