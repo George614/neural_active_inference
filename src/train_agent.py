@@ -160,7 +160,7 @@ opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
 
 if args.getArg("env_name") == "InterceptionEnv":
     f_speed_idx = int(args.getArg("f_speed_idx"))
-    env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
+    env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=False)
 else:
     env = gym.make(args.getArg("env_name"))
 # set seeds
@@ -379,7 +379,7 @@ for trial in range(n_trials):
         ### after each training episode is done ###
         if args.getArg("env_name") == "InterceptionEnv":
             f_speed_idx = np.random.randint(3)
-            env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False)
+            env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=False)
             env.seed(seed=seed)
         observation = env.reset()
 

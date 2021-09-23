@@ -163,8 +163,7 @@ class InterceptionEnv(gym.Env):
                 target_TTC = target_TTC_last_part + self.speed_change_duration - time_past_in_ramp
                 required_speed = subject_dis / target_TTC
             elif speed_phase == 2:
-                target_TTC = target_dis / target_speed
-                required_speed = subject_dis / target_TTC
+                required_speed = first_order_speed
         else:
             required_speed = first_order_speed
             
