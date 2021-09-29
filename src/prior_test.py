@@ -22,13 +22,10 @@ def calc_window_mean(window):
     mu = mu / (len(window) * 1.0)
     return mu
 
-target_speed_idx = 2
 approach_angle_idx = 3
-use_env_prior = True
+env_prior = 'prior_error'
 number_trials = 5
 number_episodes = 3000
-env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=use_env_prior)
-print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
 
 all_win_mean = []
 
@@ -37,7 +34,10 @@ for tr in range(number_trials):
     reward_window = []
     trial_win_mean = []
     
-    for i in tqdm(range(number_episodes)):
+    for ep in tqdm(range(number_episodes)):
+        target_speed_idx = np.random.randint(3)
+        env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior)
+        # print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
         env.reset()
         done = False
         episode_reward = 0
