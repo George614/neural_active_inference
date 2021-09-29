@@ -130,18 +130,18 @@ class InterceptionEnv(gym.Env):
             speed_phase = 2  # after the ramp
         if speed_phase == 1:
             speed_proportion = (self.time - self.time_to_change_speed) / self.speed_change_duration
-            target_speed = np.clip(speed_proportion * (self.target_final_speed - self.target_init_speed)
-                + self.target_init_speed, self.target_min_speed, self.target_max_speed)
-        # update target distance
-        target_dis -= target_speed / self.FPS
-
+            speed_proportion = np.clip(speed_proportion, 0.0, 1.0)
+            target_speed = speed_proportion * (self.target_final_speed - self.target_init_speed) + self.target_init_speed
+            # target_speed = min(self.target_final_speed, speed_proportion * (self.target_final_speed - self.target_init_speed) + self.target_init_speed)
+        
         # use real-time target TTC to calculate 1st-order required speed
         target_TTC = target_dis / target_speed
         first_order_speed = subject_dis / target_TTC
         self.info['1st-order_speed'] = first_order_speed
 
+        ## calculate estimated required subject speed  ##
         if self.perfect_prior:
-            # calculate estimated subject speed based on status of target changing its speed
+            # based on status of target changing its speed
             if speed_phase == 0:
                 if self.est_time_to_ramp < 0:  # speed change is later than the estimation
                     self.est_time_to_ramp = 1.0 / self.FPS # assume target will change speed in next frame
@@ -165,9 +165,10 @@ class InterceptionEnv(gym.Env):
             elif speed_phase == 2:
                 required_speed = first_order_speed
         else:
+            # assume the target has constant speed
             required_speed = first_order_speed
             
-
+        # apply action and calculate prior
         if self.action_type == 'speed': # choose pedal position
             if self.return_prior is not None:
                 # use prior preference to choose pedeal speed then calculate the 4D observations
@@ -201,7 +202,8 @@ class InterceptionEnv(gym.Env):
         elif self.action_type == 'acceleration': # choose acceleration
             subject_speed += self.action_acceleration_mappings[action]
         
-        # update subject state variables
+        # update state variables
+        target_dis -= target_speed / self.FPS
         subject_speed = np.clip(subject_speed, 0, self.subject_speed_max)
         subject_dis -= subject_speed / self.FPS
         subject_dis = np.clip(subject_dis, 0, self.subject_max_position)
@@ -435,17 +437,15 @@ class InterceptionEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    test = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior=True)
-    test.reset()
-    frame_duration = 1 / test.FPS
-    # test.render()
+    env = InterceptionEnv(target_speed_idx=2, approach_angle_idx=3, return_prior='prior_error')
+    env.reset()
+    frame_duration = 1 / env.FPS
+    # env.render()
     prev_time = time.time()
-    while not test.step()[2]:
+    while not env.step()[2]:
         time.sleep(max(frame_duration - (time.time() - prev_time), 0))
         prev_time = time.time()
-        test.render()
+        env.render()
 
-    time.sleep(frame_duration - (time.time() - prev_time))
-    test.render()
-
+    env.render()
     input('press enter to close')
