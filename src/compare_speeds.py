@@ -92,6 +92,7 @@ if __name__ == "__main__":
             ax1.plot(np.arange(len(required_speeds2)), required_speeds2, color='cyan', label='perfect_speed2', linewidth=0.5)
             ax1.plot(np.arange(len(first_order_speeds2)), first_order_speeds2, linestyle = '--', color='cyan', label='1st-order_speed2', linewidth=0.5)
             ax1.axhline(y=max(env.action_speed_mappings), color = 'black', linestyle = '-', label='max_speed', linewidth=0.5)
+            ax1.axhline(y=min(env.action_speed_mappings), color = 'black', linestyle = '--', label='min_speed', linewidth=0.5)
             ax1.legend(bbox_to_anchor=(0., 1.1, 1., .2), loc='lower left', fontsize='xx-small', ncol=2, mode='expand', borderaxespad=0.)
             ax1.set_ylim([0, 15])
             ax1.set_ylabel("Speed")
