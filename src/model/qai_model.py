@@ -63,6 +63,9 @@ class QAIModel:
         efe_dims = efe_dims + hid_dims
         efe_dims.append(self.dim_a)
 
+        ## offset model dims ##
+        offsetM_dims = [2, 64, 1]
+
         act_fun = self.act_fx #"relu"
         efe_act_fun = self.efe_act_fx #"relu6"
         wght_sd = 0.025
@@ -76,15 +79,23 @@ class QAIModel:
                            init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
         self.efe_target = ProbMLP(name="EFE_targ",z_dims=efe_dims, act_fun=efe_act_fun, wght_sd=wght_sd,
                                   init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
+        ## offset prediction model / predictive component ##
+        self.offset_model = ProbMLP(name="OffsetModel",z_dims=offsetM_dims, act_fun=act_fun, wght_sd=wght_sd,
+                                  init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
 
         # clump all parameter variables of sub-models/modules into one shared pointer list
         self.param_var = []
         self.param_var = self.param_var + self.transition.extract_params()
         self.param_var = self.param_var + self.efe.extract_params()
+        self.param_var = self.param_var + self.offset_model.extract_params()
 
-        self.epsilon = tf.Variable(1.0, trainable=False)  # epsilon greedy parameter
-        self.gamma = tf.Variable(1.0, trainable=False)  # gamma weighting factor for balance KL-D on transition vs unit Gaussian
-        self.rho = tf.Variable(self.rho, trainable=False)  # weight term on the epistemic value
+        self.epsilon = tf.Variable(1.0, name='epsilon', trainable=False)  # epsilon greedy parameter
+        self.gamma = tf.Variable(1.0, name='gamma', trainable=False)  # gamma weighting factor for balance KL-D on transition vs unit Gaussian
+        self.rho = tf.Variable(self.rho, name='rho', trainable=False)  # weight term on the epistemic value
+        self.alpha = tf.Variable(1.0, name='alpha', trainable=True)  # linear tranformation scale factor for offset
+        self.beta = tf.Variable(0.0, name='beta', trainable=True)  # linear transformation shift factor for offset
+        self.param_var.append(self.alpha)
+        self.param_var.append(self.beta)        
         self.tau = -1 # if set to 0, then no Polyak averaging is used for target network
         self.update_target()
 
@@ -106,6 +117,22 @@ class QAIModel:
     def clear_state(self):
         pass
 
+    def infer_offset(self, init_obv):
+        offset, _, _ = self.offset_model.predict(init_obv)
+        return offset
+
+    def train_pc(self, init_obv, H_error):
+        with tf.GradientTape() as tape:
+            offset, _, _ = self.offset_model.predict(init_obv)
+            offset = tf.clip_by_value(offset, -12.0, 12.0)
+            H_hat = offset * self.alpha + self.beta  # estimated hindsight error
+            loss_h_reconst = tf.math.square(H_hat - H_error)
+            loss_h_error = tf.math.square(H_hat)
+            loss_pc = loss_h_reconst + loss_h_error
+        grads_pc = tape.gradient(loss_pc, self.param_var)
+
+        return grads_pc, loss_h_reconst, loss_h_error
+
     def train_step(self, obv_t, obv_next, action, done, weights=None, reward=None, obv_prior=None):
         with tf.GradientTape(persistent=True) as tape:
             ### run s_t and a_t through transition model ###
@@ -122,6 +149,7 @@ class QAIModel:
                         # difference between preferred future and actual future, i.e. instrumental term
                         #R_ti = -1.0 * g_nll(obv_next, o_prior_mu, o_prior_std * o_prior_std, keep_batch=True)
                         R_ti = -1.0 * mse(x_true=obv_next, x_pred=o_prior_mu, keep_batch=True)
+                        # R_ti = -1.0 * tf.losses.huber(obv_next, o_prior_mu)
                     else:
                         if self.use_prior_space: # calculate instrumental term in prior space
                             error_prior_space = tf.reduce_sum(action * obv_prior, axis=1, keepdims=True)
