@@ -113,7 +113,7 @@ class InterceptionEnv(gym.Env):
         return [seed]
 
 
-    def step(self, action=None):
+    def step(self, action=None, offset=None):
         if action is not None:
             assert self.action_space.contains(
                 action), "%r (%s) invalid" % (action, type(action))
@@ -128,6 +128,8 @@ class InterceptionEnv(gym.Env):
             speed_phase = 1  # during the ramp
         if speed_phase == 1 and target_speed == self.target_final_speed:
             speed_phase = 2  # after the ramp
+            # calculate hindsight error at the end of the ramp
+            self.hindsight_error = subject_dis/subject_speed - target_dis/target_speed
         if speed_phase == 1:
             speed_proportion = (self.time - self.time_to_change_speed) / self.speed_change_duration
             speed_proportion = np.clip(speed_proportion, 0.0, 1.0)
@@ -177,8 +179,20 @@ class InterceptionEnv(gym.Env):
                     pedal_speed_n = self.action_speed_mappings[prior_action]
                     prior_sub_speed_n = subject_speed + (pedal_speed_n - subject_speed) * self.lag_coefficient
                     prior_speed_diff = prior_sub_speed_n - required_speed
-                    prior_speed_diffs.append(np.abs(prior_speed_diff))
-                action_prior = np.argmin(prior_speed_diffs)  # using prior knowledge: speed_diff ~ N(0, sigma)
+                    prior_speed_diffs.append(prior_speed_diff)
+                if offset is None:
+                    # use prior centered at 0: speed_diff ~ N(0, sigma)
+                    prior_speed_diffs = [np.abs(diff) for diff in prior_speed_diffs]
+                    action_prior = np.argmin(prior_speed_diffs)
+                else:
+                    if speed_phase == 2:
+                        # use prior centered at 0: speed_diff ~ N(0, sigma)
+                        prior_speed_diffs = [np.abs(diff) for diff in prior_speed_diffs]
+                        action_prior = np.argmin(prior_speed_diffs)
+                    else:
+                        # use prior center at offset: speed_diff ~ N(offset, sigma)
+                        prior_speed_diffs = [np.abs(diff - offset) for diff in prior_speed_diffs]
+                        action_prior = np.argmin(prior_speed_diffs)
                 pedal_speed_prior = self.action_speed_mappings[action_prior]
                 prior_sub_speed = subject_speed + (pedal_speed_prior - subject_speed) * self.lag_coefficient
                 prior_sub_dis = subject_dis - prior_sub_speed / self.FPS
@@ -215,6 +229,10 @@ class InterceptionEnv(gym.Env):
             subject_dis <= 0 or target_dis <= 0 or target_subject_dis <= self.intercept_threshold
         )
         reward = 1 if target_subject_dis <= self.intercept_threshold else 0
+
+        # hindsight error for going too fast
+        if done and self.hindsight_error is None:
+            self.hindsight_error = -1.0 * target_dis/target_speed
 
         self.state = (target_dis, target_speed, subject_dis, subject_speed)
         self.info['speed_phase'] = speed_phase
@@ -275,6 +293,8 @@ class InterceptionEnv(gym.Env):
         # target_init_TTC = temp_term / most_likely_FS + (most_likely_TTCS + self.speed_change_duration)
         # # calculate required speed for subject based on initial conditions
         # required_speed = subject_init_distance / target_init_TTC
+
+        self.hindsight_error = None
 
         self.info = {'speed_phase' : speed_phase,
                      'required_speed' : None}
