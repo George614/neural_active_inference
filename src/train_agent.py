@@ -26,7 +26,7 @@ and expected free energy (EFE) network jointly using simple Q-learning.
 Note that this agent uses the dynamic scalar normalization proposed in
 Ororbia & Mali (2021) "Adapting to Dynamic Environments with Active Neural Generative Coding".
 
-@author Alexander G. Ororbia
+@author Alexander G. Ororbia, Zhizhuo (George) Yang
 """
 
 def calc_window_mean(window):
@@ -119,6 +119,9 @@ use_per_buffer = args.getArg("use_per_buffer").strip().lower() == 'true'
 equal_replay_batches = args.getArg("equal_replay_batches").strip().lower() == 'true'
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
+hindsight_learn = args.getArg("hindsight_learn").strip().lower() == 'true'
+if hindsight_learn:
+    perfect_prior = False
 use_env_prior = False if args.getArg("env_prior").strip().lower() == 'none' else True
 if use_env_prior:
     env_prior = args.getArg("env_prior")
@@ -157,10 +160,11 @@ opt_type = args.getArg("optimizer").strip().lower()
 lr  = tf.Variable( float(args.getArg("learning_rate")) )
 learning_rate_decay = float(args.getArg("learning_rate_decay"))
 opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
+opt2 = create_optimizer(opt_type, eta=lr*10, epsilon=1e-5)
 
 if args.getArg("env_name") == "InterceptionEnv":
     f_speed_idx = int(args.getArg("f_speed_idx"))
-    env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=False)
+    env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
 else:
     env = gym.make(args.getArg("env_name"))
 # set seeds
@@ -230,13 +234,21 @@ for trial in range(n_trials):
     loss_efe = None
 
     print(" >> Starting simulation...")
-    observation = env.reset()
 
     # for frame_idx in range(1, num_frames + 1): # deprecated
     for ep_idx in range(num_episodes):  # training using episode as cycle
         ### training the PPL model ###
+        if args.getArg("env_name") == "InterceptionEnv":
+            f_speed_idx = np.random.randint(3)
+            env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
+            env.seed(seed=seed)
+        observation = env.reset()
+        init_condition = tf.expand_dims(observation[:2], axis=0)
+        if hindsight_learn:  # if use predictive component to learn from hindsight error
+            offset = pplModel.infer_offset(init_condition)
+            offset = offset.numpy().squeeze()
         done = False
-        ## linear schedule for VAE model regularization
+        # linear schedule for VAE model regularization
         if vae_reg:
             gamma = gamma_by_episode(ep_idx)
             pplModel.gamma.assign(gamma)
@@ -258,7 +270,10 @@ for trial in range(n_trials):
             action = action.numpy().squeeze()
 
             if use_env_prior:
-                next_obv, reward, done, obv_prior, _ = env.step(action)
+                if hindsight_learn:
+                    next_obv, reward, done, obv_prior, _ = env.step(action, offset)
+                else:
+                    next_obv, reward, done, obv_prior, _ = env.step(action)
             else:
                 next_obv, reward, done, _ = env.step(action)
             episode_reward += reward
@@ -373,15 +388,20 @@ for trial in range(n_trials):
                 pplModel.update_target()
 
         pplModel.clear_state()
-        # if ep_idx % target_update_ep == 0:
+        # if ep_idx % target_update_ep == 0: # episodic update for target net
         #     pplModel.update_target()
 
+        if hindsight_learn:
+            # learn from hindsight error
+            grads_pc, loss_h_reconst, loss_h_error = pplModel.train_pc(init_condition, env.hindsight_error)
+            grads_pc_clipped = []
+            for grad in grads_pc:
+                if grad is not None:
+                    grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
+                grads_pc_clipped.append(grad)
+            opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
+
         ### after each training episode is done ###
-        if args.getArg("env_name") == "InterceptionEnv":
-            f_speed_idx = np.random.randint(3)
-            env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=False)
-            env.seed(seed=seed)
-        observation = env.reset()
 
         if loss_efe is not None:
             print("-----------------------------------------------------------------")
@@ -394,6 +414,11 @@ for trial in range(n_trials):
             pplModel.epsilon.assign(0.0) # use greedy policy when testing
             reward_list = []
             for _ in range(test_episodes):
+                if args.getArg("env_name") == "InterceptionEnv":
+                    f_speed_idx = np.random.randint(3)
+                    env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
+                    env.seed(seed=seed)
+                observation = env.reset()
                 episode_reward = 0
                 done_test = False
                 while not done_test:
@@ -403,15 +428,14 @@ for trial in range(n_trials):
                     action = action.numpy().squeeze()
                     observation, reward, done_test, _ = env.step(action)
                     episode_reward += reward
-                observation = env.reset()
                 reward_list.append(episode_reward)
             #pplModel.rho.assign(1.0)
-
             mean_reward = np.mean(reward_list)
             #std_reward = np.std(reward_list)
             mean_ep_reward.append(mean_reward)
             #std_ep_reward.append(std_reward)
             episode_reward = mean_reward
+        
         pplModel.clear_state()
         # else --> just use training reward as episode reward (online learning)
         global_reward.append(episode_reward)
@@ -447,6 +471,7 @@ for trial in range(n_trials):
     print("==> Saving QAI model: {0}".format(agent_fname))
     save_object(pplModel, fname="{0}.agent".format(agent_fname))
 
+### plotting for window-averaged rewards ###
 plot_rewards = args.getArg("plot_rewards").strip().lower() == 'true'
 if plot_rewards:
     from pathlib import Path
