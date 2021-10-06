@@ -17,16 +17,21 @@ import numpy as np
 sys.path.insert(0, 'utils/')
 from utils import load_object
 sys.path.insert(0, 'model/')
-from interception_py_env import InterceptionEnv
+env_id = 'MountainCar-v0' # gym env names or 'interception'
+if env_id == 'interception':
+    from interception_py_env import InterceptionEnv
+else:
+    import gym
+    env = gym.make(env_id)
 
 approach_angle_idx = 3
 env_prior = None # 'prior_error' or prior_obv or None
 num_episodes = 100
 
 # load trained QAI model
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_allSpeeds_PriorError_perfect_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
+model_save_path = "D:/Projects/neural_active_inference/exp/mcar/qai/"
 trial_num = 1
-episode_num = 850
+episode_num = 1950
 qaiModel = load_object(model_save_path + "trial_{}_epd_{}.agent".format(trial_num, episode_num))
 print("Loaded QAI model from {}".format(model_save_path))
 qaiModel.epsilon.assign(0.0)
@@ -34,9 +39,10 @@ qaiModel.epsilon.assign(0.0)
 total_rewards = 0
 transition_list = []
 for ep in range(num_episodes):
-    target_speed_idx = np.random.randint(3)
-    env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior)
-    print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
+    if env_id == 'interception':
+        target_speed_idx = np.random.randint(3)
+        env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior)
+        print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
     ep_reward = 0
     observation = env.reset()
     done = False
