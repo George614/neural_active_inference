@@ -127,6 +127,8 @@ if use_env_prior:
     env_prior = args.getArg("env_prior")
 else:
     env_prior = None
+record_stats = True
+record_interval = 25
 seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
 epsilon_start = float(args.getArg("epsilon_start"))
@@ -173,6 +175,16 @@ np.random.seed(seed)
 env.seed(seed=seed)
 args.variables['seed'] = seed
 
+# get dimensions of the rendering if needed
+if record_stats:
+    import cv2
+    _ = env.reset()
+    env.step(0)
+    img = env.render(mode='rgb_array')
+    width = img.shape[1]
+    height = img.shape[0]
+    fourcc = cv2.VideoWriter_fourcc(*'XVID') # 'XVID' with '.avi' or 'mp4v' with '.mp4' suffix
+    FPS = 30
 ################################################################################
 ### load and pre-process expert-batch data ###
 all_data = None
@@ -228,6 +240,11 @@ for trial in range(n_trials):
     trial_win_mean = []
     mean_ep_reward = []
     std_ep_reward = []
+    if record_stats:
+        target_1st_order_TTC_list = []
+        target_actual_mean_TTC_list = []
+        agent_TTC_list = []
+        EFE_values_trial_list = []
     frame_idx = 0
     crash = False
     rho_anneal_start = False
@@ -248,6 +265,10 @@ for trial in range(n_trials):
             offset = pplModel.infer_offset(init_condition)
             offset = offset.numpy().squeeze()
         done = False
+        if record_stats and ep_idx % record_interval == 0:
+            TTC_calculated = False
+            efe_list = []
+            video = cv2.VideoWriter(out_dir+"trial_{}_epd_{}_tsidx_{}.avi".format(trial, ep_idx, f_speed_idx), fourcc, float(FPS), (width, height))
         # linear schedule for VAE model regularization
         if vae_reg:
             gamma = gamma_by_episode(ep_idx)
@@ -266,16 +287,36 @@ for trial in range(n_trials):
             obv = tf.convert_to_tensor(observation, dtype=tf.float32)
             obv = tf.expand_dims(obv, axis=0)
 
-            action = pplModel.act(obv)
+            if record_stats and ep_idx % record_interval == 0:
+                action, efe_values, isRandom = pplModel.act(obv, return_efe=True)
+                efe_values = efe_values.numpy().squeeze()
+                efe_list.append(efe_values)
+            else:
+                action = pplModel.act(obv)
             action = action.numpy().squeeze()
 
             if use_env_prior:
                 if hindsight_learn:
-                    next_obv, reward, done, obv_prior, _ = env.step(action, offset)
+                    next_obv, reward, done, obv_prior, info = env.step(action, offset)
                 else:
-                    next_obv, reward, done, obv_prior, _ = env.step(action)
+                    next_obv, reward, done, obv_prior, info = env.step(action)
             else:
-                next_obv, reward, done, _ = env.step(action)
+                next_obv, reward, done, info = env.step(action)
+
+            if record_stats and ep_idx % record_interval == 0:
+                speed_phase = info['speed_phase']
+                if speed_phase == 1 and not TTC_calculated:
+                    target_1st_order_TTC = env.state[0] / env.target_init_speed
+                    target_actual_mean_TTC = info['target_TTC']
+                    agent_TTC = env.state[2] / env.state[3]
+                    TTC_calculated = True
+                    target_1st_order_TTC_list.append(target_1st_order_TTC)
+                    target_actual_mean_TTC_list.append(target_actual_mean_TTC)
+                    agent_TTC_list.append(agent_TTC)
+                img = env.render(mode='rgb_array', offset=offset, isRandom=isRandom)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                video.write(img)
+            
             episode_reward += reward
 
             efe_N = 1.0
@@ -401,6 +442,7 @@ for trial in range(n_trials):
                 grads_pc_clipped.append(grad)
             opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
 
+        env.close()
         ### after each training episode is done ###
 
         if loss_efe is not None:
@@ -462,6 +504,10 @@ for trial in range(n_trials):
             if rho_anneal_start:
                 rho = rho_by_episode(ep_idx - start_ep)
                 pplModel.rho.assign(rho)
+
+        if record_stats and ep_idx % record_interval == 0:
+            EFE_values_trial_list.append(np.asarray(efe_list))
+            video.release()
         
     env.close()
     all_win_mean.append(np.asarray(trial_win_mean))
@@ -471,6 +517,13 @@ for trial in range(n_trials):
     print("==> Saving QAI model: {0}".format(agent_fname))
     save_object(pplModel, fname="{0}.agent".format(agent_fname))
 
+    if record_stats:
+        trial_TTCs = np.vstack((target_1st_order_TTC_list, target_actual_mean_TTC_list, agent_TTC_list))
+        print("==> Saving TTC sequence...")
+        np.save("{0}trial_{1}_TTCs.npy".format(out_dir, trial), trial_TTCs)
+        print("==> Saving EFE sequence...")
+        np.save("{0}trial_{1}_EFE_values.npy".format(out_dir, trial), EFE_values_trial_list)
+
 ### plotting for window-averaged rewards ###
 plot_rewards = args.getArg("plot_rewards").strip().lower() == 'true'
 if plot_rewards:
@@ -478,7 +531,7 @@ if plot_rewards:
     import matplotlib.pyplot as plt
     result_dir = Path(out_dir)
     reward_list = []
-    for i, stuff in enumerate(list(result_dir.glob("*.npy"))):
+    for i, stuff in enumerate(list(result_dir.glob("*R.npy"))):
         rewards = np.load(str(stuff))
         reward_list.append(rewards)
         fig = plt.figure()
