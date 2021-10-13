@@ -103,16 +103,23 @@ class QAIModel:
         self.efe_target.set_weights(self.efe, tau=self.tau)
 
     def act(self, o_t, return_efe=False):
-        if tf.random.uniform(shape=()) > self.epsilon:
-            # run EFE model given state at time t
-            efe_t, _, _ = self.efe.predict(o_t)
-            action = tf.argmax(efe_t, axis=-1, output_type=tf.int32)
-        else:
-            action = tf.random.uniform(shape=(), maxval=self.dim_a, dtype=tf.int32)
-
         if return_efe:
-            return action, efe_t
-        return action
+            efe_t, _, _ = self.efe.predict(o_t)  # get EFE values anyway
+            if tf.random.uniform(shape=()) > self.epsilon:
+                action = tf.argmax(efe_t, axis=-1, output_type=tf.int32)
+                isRandom = False
+            else:
+                action = tf.random.uniform(shape=(), maxval=self.dim_a, dtype=tf.int32)
+                isRandom = True
+            return action, efe_t, isRandom
+        else:
+            if tf.random.uniform(shape=()) > self.epsilon:
+                # run EFE model given state at time t
+                efe_t, _, _ = self.efe.predict(o_t)
+                action = tf.argmax(efe_t, axis=-1, output_type=tf.int32)
+            else:  # save computation
+                action = tf.random.uniform(shape=(), maxval=self.dim_a, dtype=tf.int32)
+            return action
 
     def clear_state(self):
         pass
@@ -125,10 +132,11 @@ class QAIModel:
         with tf.GradientTape() as tape:
             offset, _, _ = self.offset_model.predict(init_obv)
             offset = tf.clip_by_value(offset, -12.0, 12.0)
-            H_hat = offset * self.alpha + self.beta  # estimated hindsight error
+            H_hat = offset * self.alpha + self.beta  # estimated hindsight error given offset in speed_diff
+            # offset = tf.clip_by_value(offset, -3.0, 3.0)
             loss_h_reconst = tf.math.square(H_hat - H_error)
             loss_h_error = tf.math.square(H_hat)
-            loss_pc = loss_h_reconst + loss_h_error
+            loss_pc = loss_h_reconst + loss_h_error #TODO *lambda_h_error, default==1
         grads_pc = tape.gradient(loss_pc, self.param_var)
 
         return grads_pc, loss_h_reconst, loss_h_error
