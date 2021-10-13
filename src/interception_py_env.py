@@ -302,7 +302,7 @@ class InterceptionEnv(gym.Env):
         return np.asarray(self.scaled_state, dtype=np.float32)
 
 
-    def render(self, mode='human'):
+    def render(self, mode='human', offset=None, isRandom=None):
         target_dis, target_speed, subject_dis, subject_speed = self.state
         speed_phase = self.info['speed_phase']
         required_speed = self.info['required_speed']
@@ -420,6 +420,23 @@ class InterceptionEnv(gym.Env):
                 rendering.Transform(translation=(5, info_top)))
             self.viewer.add_geom(self.action_label)
 
+            if isRandom is not None:
+                self.isRandom_label = text_rendering.Text("Random action: {}".format('True' if isRandom else 'False'))
+                info_top -= self.isRandom_label.text.content_height
+                self.isRandom_label.add_attr(rendering.Transform(translation=(5, info_top)))
+                self.viewer.add_geom(self.isRandom_label)
+
+            if offset is not None:
+                self.offset_label = text_rendering.Text('Offset: %.2f' % offset)
+                info_top -= self.offset_label.text.content_height
+                self.offset_label.add_attr(rendering.Transform(translation=(5, info_top)))
+                self.viewer.add_geom(self.offset_label)
+                # hindsight error is None until the end of ramp
+                self.hindsight_label = text_rendering.Text('Hindsight error: None')
+                info_top -= self.hindsight_label.text.content_height
+                self.hindsight_label.add_attr(rendering.Transform(translation=(5, info_top)))
+                self.viewer.add_geom(self.hindsight_label)
+
         # Update the state of the frame
         self.subject_trans.set_translation(-subject_dis * self.scale, 0)
         self.subject_rot.set_rotation(-self.approach_angle / 180 * math.pi)
@@ -441,6 +458,10 @@ class InterceptionEnv(gym.Env):
                 'Pedal speed: ' + str(self.action_speed_mappings[self.action]))
         self.speed_diff_label.set_text(
             'Speed difference: %.2f' % speed_diff)
+        if isRandom is not None:
+            self.isRandom_label.set_text("Random action: {}".format('True' if isRandom else 'False'))
+        if self.hindsight_error is not None:
+            self.hindsight_label.set_text('Hindsight error: %.2f' % self.hindsight_error)
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
