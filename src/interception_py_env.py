@@ -26,7 +26,7 @@ class InterceptionEnv(gym.Env):
         2      Subject distance             0.0         30.0
         3      Subject velocity             0.0         14.0
         4      Whether the target has       0           1
-               changed speed (0 or 1) #Excluded
+               changed speed (0 or 1)       #Excluded from current version!
     Actions:
         Type: Discrete(6)
         Num    Action
@@ -40,8 +40,8 @@ class InterceptionEnv(gym.Env):
         Change in speed determined by the difference between the current traveling
         speed and the new pedal position  V_dot =  K * ( Vp - Vs)
     Reward:
-         Reward of 0 is awarded if the agent intercepts the target (position = 0.5)
-         Reward of -1 is awarded everywhere else.
+         Reward of 1 is awarded if the agent intercepts the target (position = 0.5)
+         Reward of 0 is awarded everywhere else.
     Starting State:
          The simulated target approached the unmarked interception point from an
          initial distance of 45 m.
@@ -55,7 +55,7 @@ class InterceptionEnv(gym.Env):
     Episode Termination:
          The target position is at 0 (along target trajectory).
          The subject position is at 0 (along subject trajectory).
-         Episode length is greater than 6 seconds (180 steps @ 30FPS).
+         Episode length is greater than 6 seconds (360 steps @ 60FPS).
     '''
 
     def __init__(self, target_speed_idx=0, approach_angle_idx=3, return_prior=None, use_slope=False, perfect_prior=True):
@@ -113,7 +113,36 @@ class InterceptionEnv(gym.Env):
         return [seed]
 
 
+    def advance(self):
+        ''' Move forward 1 step with the agent being still '''
+        target_dis, target_speed, subject_dis, subject_speed = self.state
+        self.time += 1.0 / self.FPS
+        self.est_time_to_ramp -= 1.0 / self.FPS
+        # update state variables
+        target_dis -= target_speed / self.FPS
+        # subject remains still in the first few frames
+        done = False
+        reward = 0
+        self.state = (target_dis, target_speed, subject_dis, subject_speed)
+        # scale the observations to range (-1, 1)
+        scaled_target_dis = 2 * (target_dis / self.target_init_distance - 0.5)
+        scaled_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
+        scaled_subject_dis = 2 * (subject_dis / self.subject_max_position - 0.5)
+        scaled_subject_speed = 2 * (subject_speed / self.subject_speed_max - 0.5)
+        self.scaled_state = (scaled_target_dis, scaled_target_speed, scaled_subject_dis, scaled_subject_speed)
+        self.scaled_state = np.asarray(self.scaled_state, dtype=np.float32)
+
+        return self.scaled_state, reward, done, self.info
+
+
     def step(self, action=None, offset=None):
+        ''' 
+        Take 1 step in the environment given action from the agent. This 
+        function also returns prior error/observation when needed.
+        If the action is not specified, take the optimal action calculated
+        by the prior function. If the offset is given, alter the calculation
+        of instrumental term by the offset.
+        '''
         if action is not None:
             assert self.action_space.contains(
                 action), "%r (%s) invalid" % (action, type(action))
@@ -123,7 +152,7 @@ class InterceptionEnv(gym.Env):
         self.time += 1.0 / self.FPS
         self.est_time_to_ramp -= 1.0 / self.FPS
         
-        # handle the target changing its speed, phase 0 is before the ramp
+        ## handle the target changing its speed, phase 0 is before the ramp ##
         if self.time >= self.time_to_change_speed and speed_phase == 0:
             speed_phase = 1  # during the ramp
         if speed_phase == 1 and target_speed == self.target_final_speed:
@@ -176,7 +205,7 @@ class InterceptionEnv(gym.Env):
             # assume the target has constant speed
             required_speed = first_order_speed
             
-        # apply action and calculate prior
+        ## apply action and calculate prior ##
         if self.action_type == 'speed': # choose pedal position
             if self.return_prior is not None:
                 # use prior preference to choose pedeal speed then calculate the 4D observations
@@ -222,7 +251,7 @@ class InterceptionEnv(gym.Env):
         elif self.action_type == 'acceleration': # choose acceleration
             subject_speed += self.action_acceleration_mappings[action]
         
-        # update state variables
+        ## update state variables ##
         target_dis -= target_speed / self.FPS
         subject_speed = np.clip(subject_speed, 0, self.subject_speed_max)
         subject_dis -= subject_speed / self.FPS
@@ -240,6 +269,7 @@ class InterceptionEnv(gym.Env):
         if done and self.hindsight_error is None:
             self.hindsight_error = -1.0 * target_dis/target_speed
 
+        ## update environment state and info ##
         self.state = (target_dis, target_speed, subject_dis, subject_speed)
         self.info['speed_phase'] = speed_phase
         self.info['required_speed'] = required_speed
@@ -265,7 +295,7 @@ class InterceptionEnv(gym.Env):
 
 
     def reset(self):
-        # reset all parameters specific to the current episode
+        ''' Reset all parameters specific to the current episode '''
         self.time_to_change_speed = self.np_random.uniform(
             low=self.time_to_change_speed_min, high=self.time_to_change_speed_max)
         self.target_final_speed = np.clip(
@@ -279,7 +309,6 @@ class InterceptionEnv(gym.Env):
             low=self.subject_init_distance_min, high=self.subject_init_distance_max)
         subject_init_speed = 0.0
         speed_phase = 0  # before the ramp
-        # required_speed = subject_init_distance / (self.target_init_distance / self.target_init_speed)
         target_subject_dis = np.sqrt(np.square(self.target_init_distance) + np.square(
             subject_init_distance) - 2 * self.target_init_distance * subject_init_distance * np.cos(self.approach_angle * np.pi / 180))
         self.action = None
@@ -293,12 +322,6 @@ class InterceptionEnv(gym.Env):
         # calculate estimated total time for target to reach the interception point
         self.most_likely_TTCS = (self.time_to_change_speed_min + self.time_to_change_speed_max) * 0.5
         self.est_time_to_ramp = self.most_likely_TTCS # this variable gets updated per step
-        # most_likely_FS = self.target_fspeed_mean
-        # temp_term = self.target_init_distance - most_likely_TTCS * self.target_init_speed
-        # temp_term -= (self.target_init_speed + most_likely_FS) * self.speed_change_duration * 0.5
-        # target_init_TTC = temp_term / most_likely_FS + (most_likely_TTCS + self.speed_change_duration)
-        # # calculate required speed for subject based on initial conditions
-        # required_speed = subject_init_distance / target_init_TTC
 
         self.hindsight_error = None
 
@@ -309,11 +332,15 @@ class InterceptionEnv(gym.Env):
 
 
     def render(self, mode='human', offset=None, isRandom=None):
+        '''
+        Render to the window or a rgb array denpending on the argument
+        given. Also takes variables to render as text per step.
+        '''
         target_dis, target_speed, subject_dis, subject_speed = self.state
         speed_phase = self.info['speed_phase']
         required_speed = self.info['required_speed']
-        speed_diff = subject_speed - required_speed
-        # scale = (1 / (self.intercept_threshold / 2)) * 4
+        if required_speed is not None:
+            speed_diff = subject_speed - required_speed
 
         screen_width = 1000
 
@@ -409,7 +436,7 @@ class InterceptionEnv(gym.Env):
             self.viewer.add_geom(self.subject_speed_label)
 
             self.speed_diff_label = text_rendering.Text(
-                'Speed difference: %.2f' % speed_diff)
+                "Speed difference: {}".format(speed_diff if required_speed is not None else 'None'))
             info_top -= self.speed_diff_label.text.content_height
             self.speed_diff_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
@@ -420,7 +447,7 @@ class InterceptionEnv(gym.Env):
                     'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
             elif self.action_type == 'speed':
                 self.action_label = text_rendering.Text(
-                    'Pedal speed: ' + str(self.action_speed_mappings[self.action]))
+                    "Pedal speed: {}".format(self.action_speed_mappings[self.action] if self.action is not None else "None"))
             info_top -= self.action_label.text.content_height
             self.action_label.add_attr(
                 rendering.Transform(translation=(5, info_top)))
@@ -461,9 +488,9 @@ class InterceptionEnv(gym.Env):
                 'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
         elif self.action_type == 'speed':
             self.action_label.set_text(
-                'Pedal speed: ' + str(self.action_speed_mappings[self.action]))
+                "Pedal speed: {}".format(self.action_speed_mappings[self.action] if self.action is not None else "None"))
         self.speed_diff_label.set_text(
-            'Speed difference: %.2f' % speed_diff)
+            "Speed difference: {}".format(speed_diff if required_speed is not None else 'None'))
         if isRandom is not None:
             self.isRandom_label.set_text("Random action: {}".format('True' if isRandom else 'False'))
         if self.hindsight_error is not None:
