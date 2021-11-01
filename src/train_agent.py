@@ -8,6 +8,7 @@ import tensorflow as tf
 import numpy as np
 import gym
 sys.path.insert(0, 'utils/')
+from collections import deque
 from utils import parse_int_list, save_object, load_object
 from config import Config
 sys.path.insert(0, 'model/')
@@ -33,11 +34,7 @@ def calc_window_mean(window):
     """
         Calculates the mean/average over a finite window of values
     """
-    mu = 0.0
-    for i in range(len(window)):
-        v_i = window[i]
-        mu += v_i
-    mu = mu / (len(window) * 1.0)
+    mu = sum(window) * 1.0 / len(window)
     return mu
 
 def create_optimizer(opt_type, eta, momentum=0.9, epsilon=1e-08):
@@ -129,6 +126,7 @@ else:
     env_prior = None
 record_stats = True
 record_interval = 25
+delay_frames = 9
 seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
 epsilon_start = float(args.getArg("epsilon_start"))
@@ -236,7 +234,7 @@ for trial in range(n_trials):
         pplModel.rho.assign(0.0)
 
     global_reward = []
-    reward_window = []
+    reward_window = deque(maxlen=100)
     trial_win_mean = []
     mean_ep_reward = []
     std_ep_reward = []
@@ -264,6 +262,11 @@ for trial in range(n_trials):
         if hindsight_learn:  # if use predictive component to learn from hindsight error
             offset = pplModel.infer_offset(init_condition)
             offset = offset.numpy().squeeze()
+        if delay_frames > 0:
+            action_buffer = deque()
+            obv_buffer = deque()
+            ep_frame_idx = -1
+            obv_buffer.append(observation)
         done = False
         if record_stats and ep_idx % record_interval == 0:
             TTC_calculated = False
@@ -278,6 +281,7 @@ for trial in range(n_trials):
         episode_reward = 0
         while not done:
             frame_idx += 1
+            ep_frame_idx += 1
             if epsilon_greedy:
                 epsilon = epsilon_by_frame(frame_idx)
             else:
@@ -295,15 +299,25 @@ for trial in range(n_trials):
                 action = pplModel.act(obv)
             action = action.numpy().squeeze()
 
-            if use_env_prior:
-                if hindsight_learn:
-                    next_obv, reward, done, obv_prior, info = env.step(action, offset)
+            if use_env_prior: # if prior function is used
+                if hindsight_learn:  # if hindsight is used, also used delayed action
+                    if ep_frame_idx <= delay_frames:
+                        action_buffer.append(action)
+                        next_obv, reward, done, info = env.advance()
+                        obv_buffer.append(next_obv)
+                    else:
+                        action_buffer.append(action)
+                        delayed_action = action_buffer.popleft()
+                        next_obv, reward, done, obv_prior, info = env.step(delayed_action, offset)
+                        obv_buffer.append(next_obv)
+                        # next_obv, reward, done, obv_prior, info = env.step(action, offset) # normal step
                 else:
                     next_obv, reward, done, obv_prior, info = env.step(action)
             else:
                 next_obv, reward, done, info = env.step(action)
 
             if record_stats and ep_idx % record_interval == 0:
+                # calculate and record TTC and write 1 frame to the video
                 speed_phase = info['speed_phase']
                 if speed_phase == 1 and not TTC_calculated:
                     target_1st_order_TTC = env.state[0] / env.target_init_speed
@@ -320,6 +334,7 @@ for trial in range(n_trials):
             episode_reward += reward
 
             efe_N = 1.0
+            ## save transition tuple to the replay buffer, then train on batch w/ or w/o schedule ##
             if use_per_buffer is True:
                 if use_env_prior:
                     per_buffer.push(observation, action, reward, next_obv, done, obv_prior)
@@ -343,7 +358,13 @@ for trial in range(n_trials):
                     per_buffer.update_priorities(batch_indices, priorities.numpy())
             else:
                 if use_env_prior:
-                    replay_buffer.push(observation, action, reward, next_obv, done, obv_prior)
+                    if delay_frames > 0 and ep_frame_idx <= delay_frames:
+                        pass
+                    elif delay_frames > 0 and ep_frame_idx > delay_frames:
+                        origin_obv = obv_buffer.popleft()
+                        replay_buffer.push(origin_obv, delayed_action, reward, next_obv, done, obv_prior)
+                    else:
+                        replay_buffer.push(observation, action, reward, next_obv, done, obv_prior)
                 else:
                     replay_buffer.push(observation, action, reward, next_obv, done)
                 observation = next_obv
@@ -369,10 +390,6 @@ for trial in range(n_trials):
                 else:
                     batch_data = None
                     if len(replay_buffer) > learning_start and frame_idx % train_freq == 0:
-                    # if len(replay_buffer) > batch_size:
-                        # batch_data = replay_buffer.sample(batch_size)
-                    # else:
-                    #     batch_data = replay_buffer.sample(len(replay_buffer))
                         for _ in range(gradient_steps):
                             batch_data = replay_buffer.sample(batch_size)
                             if use_env_prior:
@@ -482,8 +499,6 @@ for trial in range(n_trials):
         # else --> just use training reward as episode reward (online learning)
         global_reward.append(episode_reward)
         reward_window.append(episode_reward)
-        if len(reward_window) > 100:
-            reward_window.pop(0)
         reward_window_mean = calc_window_mean(reward_window)
         trial_win_mean.append(reward_window_mean)
 
