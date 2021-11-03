@@ -179,6 +179,7 @@ if record_stats:
     _ = env.reset()
     env.step(0)
     img = env.render(mode='rgb_array')
+    env.close()
     width = img.shape[1]
     height = img.shape[0]
     fourcc = cv2.VideoWriter_fourcc(*'XVID') # 'XVID' with '.avi' or 'mp4v' with '.mp4' suffix

@@ -346,6 +346,11 @@ class InterceptionEnv(gym.Env):
 
         if self.viewer is None:
             from gym.envs.classic_control import rendering
+            org_constructor = rendering.Viewer.__init__
+            def constructor(self, *args, **kwargs):
+                org_constructor(self, *args, **kwargs)
+                self.window.set_visible(visible=False)
+            rendering.Viewer.__init__ = constructor
             import text_rendering
 
             actual_width = int((-math.cos(max(self.approach_angle_list) * math.pi / 180)
