@@ -243,6 +243,10 @@ for trial in range(n_trials):
         target_actual_mean_TTC_list = []
         agent_TTC_list = []
         EFE_values_trial_list = []
+        hindsight_error_list = []
+        target_front_count = 0
+        subject_front_count = 0
+
     frame_idx = 0
     crash = False
     rho_anneal_start = False
@@ -458,6 +462,14 @@ for trial in range(n_trials):
                     grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
                 grads_pc_clipped.append(grad)
             opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
+            # record hindsight error
+            hindsight_error_list.append(env.hindsight_error)
+            # record who passes the interception point first
+            if reward == 0:
+                if env.state[0] < env.state[2]:
+                    target_front_count += 1
+                else:
+                    subject_front_count += 1
 
         env.close()
         ### after each training episode is done ###
@@ -538,6 +550,12 @@ for trial in range(n_trials):
         np.save("{0}trial_{1}_TTCs.npy".format(out_dir, trial), trial_TTCs)
         print("==> Saving EFE sequence...")
         np.save("{0}trial_{1}_EFE_values.npy".format(out_dir, trial), EFE_values_trial_list)
+        print("==> Saving hindsight error sequence...")
+        np.save("{0}trial_{1}_hindsight_errors.npy".format(out_dir, trial), hindsight_error_list)
+        with open("{}who_passes_first.txt".format(out_dir), 'a+') as f:
+            total_fail_cases = target_front_count + subject_front_count
+            f.write("trial_{}_target_passes_first: {:.2f}%\n".format(trial, 100 * target_front_count/total_fail_cases))
+            f.write("trial_{}_subject_passes_first: {:.2f}%\n".format(trial, 100 * subject_front_count/total_fail_cases))
 
 ### plotting for window-averaged rewards ###
 plot_rewards = args.getArg("plot_rewards").strip().lower() == 'true'
