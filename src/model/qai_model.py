@@ -157,12 +157,12 @@ class QAIModel:
                         # difference between preferred future and actual future, i.e. instrumental term
                         #R_ti = -1.0 * g_nll(obv_next, o_prior_mu, o_prior_std * o_prior_std, keep_batch=True)
                         R_ti = -1.0 * mse(x_true=obv_next, x_pred=o_prior_mu, keep_batch=True)
-                        # R_ti = -1.0 * tf.losses.huber(obv_next, o_prior_mu)
+                        # R_ti = -1.0 * huber(obv_next, o_prior_mu)
                     else:
                         if self.use_prior_space: # calculate instrumental term in prior space
                             error_prior_space = tf.reduce_sum(action * obv_prior, axis=1, keepdims=True)
                             # R_ti = -1.0 * mse(error_prior_space, tf.zeros_like(error_prior_space), keep_batch=True)
-                            error_prior = tf.losses.huber(error_prior_space, 0.0)
+                            error_prior = huber(error_prior_space, 0.0)
                             R_ti = -1.0 * tf.expand_dims(error_prior, axis=1)
                         else:  # calculate instrumental term in observation space
                             R_ti = -1.0 * mse(x_true=obv_next, x_pred=obv_prior, keep_batch=True)
@@ -251,7 +251,7 @@ class QAIModel:
             if weights is not None:
                 loss_efe_batch = None
                 if self.efe_loss == "huber":
-                    loss_efe_batch = huber(x_true=y_j, x_pred=efe_old, keep_batch=True)
+                    loss_efe_batch = huber(y_j, efe_old)
                 else:
                     loss_efe_batch = mse(x_true=y_j, x_pred=efe_old, keep_batch=True)
                 priorities = tf.math.abs(loss_efe_batch) + 1e-5
@@ -261,7 +261,7 @@ class QAIModel:
             else:
                 if self.efe_loss == "huber":
                     # loss_efe = huber(x_true=y_j, x_pred=efe_old)
-                    loss_efe = tf.reduce_mean(tf.losses.huber(y_j, efe_old))
+                    loss_efe = tf.reduce_mean(huber(y_j, efe_old))
                 else:
                     loss_efe = mse(x_true=y_j, x_pred=efe_old)
 

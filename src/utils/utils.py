@@ -362,7 +362,7 @@ def huber_Alex(x_true, x_pred, keep_batch=False):
         huber = tf.expand_dims(huber,axis=1)
     return huber
 
-def huber(x_true, x_pred, delta=1.0, keep_batch=False):
+def huber_George(x_true, x_pred, delta=1.0, keep_batch=False):
     error = x_true - x_pred
     within_d = tf.math.less_equal(tf.abs(error), delta)
     within_d = tf.cast(within_d, dtype=tf.float32)
@@ -374,6 +374,34 @@ def huber(x_true, x_pred, delta=1.0, keep_batch=False):
     if keep_batch:
         return loss
     return tf.math.reduce_mean(loss, axis=0)
+
+def huber(y_true, y_pred, delta=1.0):
+  """Computes Huber loss value.
+  For each value x in `error = y_true - y_pred`:
+  ```
+  loss = 0.5 * x^2                  if |x| <= d
+  loss = d * |x| - 0.5 * d^2        if |x| > d
+  ```
+  where d is `delta`. See: https://en.wikipedia.org/wiki/Huber_loss
+  Args:
+    y_true: tensor of true targets.
+    y_pred: tensor of predicted targets.
+    delta: A float, the point where the Huber loss function changes from a
+      quadratic to linear.
+  Returns:
+    Tensor with one scalar loss entry per sample.
+  """
+  from tensorflow.keras import backend
+  y_pred = tf.cast(y_pred, dtype=backend.floatx())
+  y_true = tf.cast(y_true, dtype=backend.floatx())
+  delta = tf.cast(delta, dtype=backend.floatx())
+  error = tf.subtract(y_pred, y_true)
+  abs_error = tf.abs(error)
+  half = tf.convert_to_tensor(0.5, dtype=abs_error.dtype)
+  return backend.mean(
+      tf.where(abs_error <= delta, half * tf.square(error),
+                         delta * abs_error - half * tf.square(delta)),
+      axis=-1)
 
 def aleatoric_loss(y_true, y_mu, y_log_var):
     N = y_true.shape[0]
