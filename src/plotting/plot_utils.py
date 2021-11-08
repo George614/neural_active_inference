@@ -11,10 +11,10 @@ from matplotlib.animation import FuncAnimation
 from pathlib import Path
 import subprocess
 
-out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/delayed_action_noEpst_noEpsGreedy_hindsightError_DQNhyperP_512net_relu_learnSche_50/"
+out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/delayed_action_noEpsGreedy_hindsightError_DQNhyperP_512net_relu_learnSche_2k/"
 result_dir = Path(out_dir)
-num_trials = 3
-num_episodes = 50
+num_trials = 5
+num_episodes = 2000
 
 
 def plot_efe(efe_list, trial_num, episode_num):
@@ -107,15 +107,15 @@ def plot_hindsight_error():
     for i in range(len(hindsight_list)):
         fig, ax = plt.subplots(constrained_layout=True)
         # ax.plot(np.arange(0, num_episodes, 25), hindsight_list[i][:], marker="*")
-        ax.plot(np.arange(0, num_episodes), hindsight_list[i][:], marker="*")
+        ax.plot(np.arange(0, num_episodes), hindsight_list[i][:], marker=".", linewidth=0.5)
         ax.set_xlabel("episodes")
         ax.set_ylabel("Time in seconds")
         ax.set_title("Hindsight errors throughout a trial")
         fig.savefig(out_dir + "/trial_{}_hindsight_errors.png".format(i), dpi=200, bbox_inches="tight")
 
 
-plot_TTC()
 plot_hindsight_error()
+plot_TTC()
 # plot_all_EFE()
 
 # os.chdir(out_dir)

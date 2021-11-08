@@ -24,8 +24,9 @@ def calc_window_mean(window):
 
 approach_angle_idx = 3
 env_prior = 'prior_error'
+use_slope = True
 number_trials = 5
-number_episodes = 3000
+number_episodes = 1000
 
 all_win_mean = []
 
@@ -36,7 +37,7 @@ for tr in range(number_trials):
     
     for ep in tqdm(range(number_episodes)):
         target_speed_idx = np.random.randint(3)
-        env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior)
+        env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior, use_slope=use_slope)
         # print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
         env.reset()
         done = False
