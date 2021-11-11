@@ -126,6 +126,7 @@ else:
     env_prior = None
 record_stats = True
 record_interval = 25
+record_video = False
 delay_frames = 9
 seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
@@ -174,7 +175,7 @@ env.seed(seed=seed)
 args.variables['seed'] = seed
 
 # get dimensions of the rendering if needed
-if record_stats:
+if record_video:
     import cv2
     _ = env.reset()
     env.step(0)
@@ -276,7 +277,8 @@ for trial in range(n_trials):
         if record_stats and ep_idx % record_interval == 0:
             TTC_calculated = False
             efe_list = []
-            video = cv2.VideoWriter(out_dir+"trial_{}_epd_{}_tsidx_{}.avi".format(trial, ep_idx, f_speed_idx), fourcc, float(FPS), (width, height))
+            if record_video:
+                video = cv2.VideoWriter(out_dir+"trial_{}_epd_{}_tsidx_{}.avi".format(trial, ep_idx, f_speed_idx), fourcc, float(FPS), (width, height))
         # linear schedule for VAE model regularization
         if vae_reg:
             gamma = gamma_by_episode(ep_idx)
@@ -332,9 +334,10 @@ for trial in range(n_trials):
                     target_1st_order_TTC_list.append(target_1st_order_TTC)
                     target_actual_mean_TTC_list.append(target_actual_mean_TTC)
                     agent_TTC_list.append(agent_TTC)
-                img = env.render(mode='rgb_array', offset=offset, isRandom=isRandom)
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                video.write(img)
+                if record_video:
+                    img = env.render(mode='rgb_array', offset=offset, isRandom=isRandom)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    video.write(img)
             
             episode_reward += reward
 
@@ -535,7 +538,8 @@ for trial in range(n_trials):
 
         if record_stats and ep_idx % record_interval == 0:
             EFE_values_trial_list.append(np.asarray(efe_list))
-            video.release()
+            if record_video:
+                video.release()
         
     env.close()
     all_win_mean.append(np.asarray(trial_win_mean))
