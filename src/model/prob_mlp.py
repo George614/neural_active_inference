@@ -172,11 +172,17 @@ class ProbMLP:
         """
         #self.param_var = copy.deepcopy(source.param_var)
         if tau >= 0.0:
-            for l in range(0, len(self.param_var)):
-                self.param_var[l].assign( self.param_var[l] * (1 - tau) + source.param_var[l] * tau )
+            for l in range(len(self.param_var)):
+                if type(source) is list:
+                    self.param_var[l].assign(self.param_var[l] * (1 - tau) + source[l] * tau)
+                else:
+                    self.param_var[l].assign(self.param_var[l] * (1 - tau) + source.param_var[l] * tau)
         else:
-            for l in range(0, len(self.param_var)):
-                self.param_var[l].assign( source.param_var[l] )
+            for l in range(len(self.param_var)):
+                if type(source) is list:
+                    self.param_var[l].assign(source[l])
+                else:    
+                    self.param_var[l].assign(source.param_var[l])
 
     def view_wnorms(self):
         print()
