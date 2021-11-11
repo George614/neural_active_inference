@@ -24,17 +24,18 @@ class QAIModel:
         self.dim_o = int(args.getArg("dim_o"))  # observation size
         self.dim_a = int(args.getArg("dim_a"))  # action size
         self.global_mu = tf.zeros((1, self.dim_o), name="speed_diff")
-        self.layer_norm = (args.getArg("layer_norm").strip().lower() == 'true')
+        self.layer_norm = args.getArg("layer_norm").strip().lower() == 'true'
         self.l2_reg = float(args.getArg("l2_reg"))
         self.act_fx = args.getArg("act_fx")
         self.efe_act_fx = args.getArg("efe_act_fx")
         self.gamma_d = float(args.getArg("gamma_d"))
-        self.use_sum_q = (args.getArg("use_sum_q").strip().lower() == 'true')
+        self.use_sum_q = args.getArg("use_sum_q").strip().lower() == 'true'
         self.instru_term = args.getArg("instru_term")
-        self.normalize_signals = (args.getArg("normalize_signals").strip().lower() == 'true')
+        self.normalize_signals = args.getArg("normalize_signals").strip().lower() == 'true'
         self.seed = int(args.getArg("seed"))
         self.rho = float(args.getArg("rho"))
         self.use_prior_space = args.getArg("env_prior").strip().lower() == 'prior_error'
+        self.use_combined_nn = args.getArg("combined_nn").strip().lower() == 'true'
         self.EFE_bound = 1.0
         self.max_R_ti = 1.0
         self.min_R_ti = 0.01 #-1.0 for GLL #0.01
@@ -63,6 +64,18 @@ class QAIModel:
         efe_dims = efe_dims + hid_dims
         efe_dims.append(self.dim_a)
 
+        ## Recognition model dims ##
+        recog_dims = [self.dim_o]
+        recog_dims = recog_dims + hid_dims
+
+        ## EFE head dims ##
+        efe_head_dims = [hid_dims[-1]]
+        efe_head_dims.append(self.dim_a)
+
+        ## Observation head dims ##
+        obv_head_dims = [hid_dims[-1]]
+        obv_head_dims.append(self.dim_o)
+
         ## offset model dims ##
         offsetM_dims = [2, 64, 1]
 
@@ -71,22 +84,41 @@ class QAIModel:
         wght_sd = 0.025
         init_type = "alex_uniform"
 
-        ## transition model ##
-        self.transition = ProbMLP(name="Trans",z_dims=trans_dims, act_fun=act_fun, wght_sd=wght_sd,
-                                  init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
-        ## EFE value model ##
-        self.efe = ProbMLP(name="EFE",z_dims=efe_dims, act_fun=efe_act_fun, wght_sd=wght_sd,
-                           init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
         self.efe_target = ProbMLP(name="EFE_targ",z_dims=efe_dims, act_fun=efe_act_fun, wght_sd=wght_sd,
                                   init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
         ## offset prediction model / predictive component ##
         self.offset_model = ProbMLP(name="OffsetModel",z_dims=offsetM_dims, act_fun=act_fun, wght_sd=wght_sd,
                                   init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
 
+        if self.use_combined_nn:
+            ## Recognition model that combines partial functionalities of EFe model and forward/transition model ##
+            self.recognition = ProbMLP(name="Recognition", z_dims=recog_dims, act_fun=act_fun, out_fun=act_fun,
+                                        wght_sd=wght_sd, init_type=init_type, use_layer_norm=self.layer_norm,
+                                        seed=self.seed)
+            ## Add-on neural layer to the Recognition model for estimating EFE values ##
+            self.efe_head = ProbMLP(name="EFE_head", z_dims=efe_head_dims, act_fun=act_fun, wght_sd=wght_sd,
+                                      init_type=init_type, use_layer_norm=self.layer_norm, seed=self.seed)
+            ## Add-on neural layer to the Recognition model for predicting future observation ##
+            self.obv_head = ProbMLP(name="Obv_head", z_dims=obv_head_dims, act_fun=act_fun, wght_sd=wght_sd,
+                                      init_type=init_type, use_layer_norm=self.layer_norm, seed=self.seed)
+        else:
+            ## transition model ##
+            self.transition = ProbMLP(name="Trans",z_dims=trans_dims, act_fun=act_fun, wght_sd=wght_sd,
+                                      init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
+            ## EFE value model ##
+            self.efe = ProbMLP(name="EFE",z_dims=efe_dims, act_fun=efe_act_fun, wght_sd=wght_sd,
+                               init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)
+
         # clump all parameter variables of sub-models/modules into one shared pointer list
         self.param_var = []
-        self.param_var = self.param_var + self.transition.extract_params()
-        self.param_var = self.param_var + self.efe.extract_params()
+
+        if self.use_combined_nn:
+            self.param_var = self.param_var + self.recognition.extract_params()
+            self.param_var = self.param_var + self.efe_head.extract_params()
+            self.param_var = self.param_var + self.obv_head.extract_params()
+        else:
+            self.param_var = self.param_var + self.transition.extract_params()
+            self.param_var = self.param_var + self.efe.extract_params()
         self.param_var = self.param_var + self.offset_model.extract_params()
 
         self.epsilon = tf.Variable(1.0, name='epsilon', trainable=False)  # epsilon greedy parameter
@@ -100,11 +132,19 @@ class QAIModel:
         self.update_target()
 
     def update_target(self):
-        self.efe_target.set_weights(self.efe, tau=self.tau)
+        if self.use_combined_nn:
+            efe_weights = self.recognition.param_var + self.efe_head.param_var
+            self.efe_target.set_weights(efe_weights, tau=self.tau)
+        else:
+            self.efe_target.set_weights(self.efe, tau=self.tau)
 
     def act(self, o_t, return_efe=False):
-        if return_efe:
-            efe_t, _, _ = self.efe.predict(o_t)  # get EFE values anyway
+        if return_efe: # get EFE values always
+            if self.use_combined_nn:
+                hidden_vars, _, _ = self.recognition.predict(o_t)
+                efe_t, _, _ = self.efe_head.predict(hidden_vars)
+            else:
+                efe_t, _, _ = self.efe.predict(o_t)
             if tf.random.uniform(shape=()) > self.epsilon:
                 action = tf.argmax(efe_t, axis=-1, output_type=tf.int32)
                 isRandom = False
@@ -115,7 +155,11 @@ class QAIModel:
         else:
             if tf.random.uniform(shape=()) > self.epsilon:
                 # run EFE model given state at time t
-                efe_t, _, _ = self.efe.predict(o_t)
+                if self.use_combined_nn:
+                    hidden_vars, _, _ = self.recognition.predict(o_t)
+                    efe_t, _, _ = self.efe_head.predict(hidden_vars)
+                else:
+                    efe_t, _, _ = self.efe.predict(o_t)
                 action = tf.argmax(efe_t, axis=-1, output_type=tf.int32)
             else:  # save computation
                 action = tf.random.uniform(shape=(), maxval=self.dim_a, dtype=tf.int32)
@@ -143,10 +187,15 @@ class QAIModel:
 
     def train_step(self, obv_t, obv_next, action, done, weights=None, reward=None, obv_prior=None):
         with tf.GradientTape(persistent=True) as tape:
-            ### run s_t and a_t through transition model ###
-            o_next_tran_mu, _, _ = self.transition.predict(tf.concat([obv_t, action], axis=-1))
-            ### predict EFE value at time t ###
-            efe_t, _, _ = self.efe.predict(obv_t)
+            if self.use_combined_nn:
+                hidden_vars, _, _ = self.recognition.predict(obv_t)
+                efe_t, _, _ = self.efe_head.predict(hidden_vars)
+                o_next_tran_mu, _, _ = self.obv_head.predict(hidden_vars)
+            else:
+                ### run s_t and a_t through transition model ###
+                o_next_tran_mu, _, _ = self.transition.predict(tf.concat([obv_t, action], axis=-1))
+                ### predict EFE value at time t ###
+                efe_t, _, _ = self.efe.predict(obv_t)
 
             with tape.stop_recording():
                 ### instrumental term ###
