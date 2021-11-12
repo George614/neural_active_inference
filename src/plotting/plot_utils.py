@@ -9,9 +9,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from pathlib import Path
+from collections import deque
 import subprocess
 
-out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/delayed_action_noEpsGreedy_hindsightError_DQNhyperP_512net_relu_learnSche_2k/"
+out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/25trials/delayed_action_noEpsGreedy_hindsightError_DQNhyperP_512net_relu_learnSche_2k_25trials/"
 result_dir = Path(out_dir)
 num_trials = 5
 num_episodes = 2000
@@ -75,10 +76,13 @@ def plot_TTC():
     for i in range(len(TTC_list)):
         fig, ax = plt.subplots(constrained_layout=True)
         ax.set_ylim(0.0, 3.0)
-        ax.scatter(np.arange(0, num_episodes, 25), TTC_list[i][0,:], marker="*", label='target_1st_order')
-        ax.scatter(np.arange(0, num_episodes, 25), TTC_list[i][1,:], marker="_", label='target_actual')
-        ax.scatter(np.arange(0, num_episodes, 25), TTC_list[i][2,:], marker=".", label='subject')
-        ax.set_xlabel("episodes")
+        # ax.scatter(np.arange(0, num_episodes, 25), TTC_list[i][0,:], marker="*", label='target_1st_order')
+        # ax.scatter(np.arange(0, num_episodes, 25), TTC_list[i][1,:], marker="_", label='target_actual')
+        # ax.scatter(np.arange(0, num_episodes, 25), TTC_list[i][2,:], marker=".", label='subject')
+        ax.scatter(np.arange(TTC_list[i].shape[1]), TTC_list[i][0,:], marker="*", label='target_1st_order')
+        ax.scatter(np.arange(TTC_list[i].shape[1]), TTC_list[i][1,:], marker="_", label='target_actual')
+        ax.scatter(np.arange(TTC_list[i].shape[1]), TTC_list[i][2,:], marker=".", label='subject')
+        ax.set_xlabel("checkpoints") # checkpoints are taken every 25 episodes
         ax.set_ylabel("Time in seconds")
         ax.set_title("TTC during a trial")
         ax.legend(loc='lower left', fontsize='xx-small', ncol=3, mode=None, borderaxespad=0.)
@@ -114,8 +118,46 @@ def plot_hindsight_error():
         fig.savefig(out_dir + "/trial_{}_hindsight_errors.png".format(i), dpi=200, bbox_inches="tight")
 
 
+def calc_window_mean(window):
+    mu = sum(window) * 1.0 / len(window)
+    return mu
+
+
+def plot_rewards():
+    reward_list = []
+    for _, npystr in enumerate(list(result_dir.glob("*R.npy"))):
+        rewards = np.load(str(npystr))
+        reward_list.append(rewards)
+    win_reward_list = []
+    for ep_rewards in reward_list:
+        reward_window = deque(maxlen=100)
+        trial_win_mean = []
+        for i in range(len(ep_rewards)):    
+            reward_window.append(ep_rewards[i])
+            reward_win_mean = calc_window_mean(reward_window)
+            trial_win_mean.append(reward_win_mean)
+        win_reward_list.append(trial_win_mean)
+    for tr in range(len(win_reward_list)):
+        fig = plt.figure()
+        plt.plot(np.arange(len(win_reward_list[tr])), win_reward_list[tr], linewidth=0.5)
+        plt.xlabel("Episodes")
+        plt.title("Window-averaged Rewards")
+        fig.savefig(out_dir + "trial_{}_win_avg.png".format(tr), dpi=200)
+    win_reward_np = np.asarray(win_reward_list)
+    fig, ax = plt.subplots()
+    mean_rewards = np.mean(win_reward_np, axis=0)
+    std_rewards = np.std(win_reward_np, axis=0)
+    ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='red', label='mean_rewards', linewidth=0.5)
+    ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='pink', alpha=0.25)
+    ax.legend(bbox_to_anchor=(0., 1.1, 1., .2), loc='lower left', fontsize='small', ncol=3, mode='expand', borderaxespad=0.)
+    ax.set_ylabel("Rewards")
+    ax.set_xlabel("Number of episodes")
+    ax.set_title("Window-averaged rewards")
+    fig.savefig(out_dir + "mean_win_rewards.png", dpi=200, bbox_inches="tight")
+
 plot_hindsight_error()
 plot_TTC()
+plot_rewards()
 # plot_all_EFE()
 
 # os.chdir(out_dir)
