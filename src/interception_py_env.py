@@ -341,6 +341,10 @@ class InterceptionEnv(gym.Env):
         required_speed = self.info['required_speed']
         if required_speed is not None:
             speed_diff = subject_speed - required_speed
+        if subject_speed != 0.0:
+            TTC_diff = subject_dis / subject_speed - target_dis / target_speed
+        else:
+            TTC_diff = None
 
         screen_width = 1000
 
@@ -447,6 +451,13 @@ class InterceptionEnv(gym.Env):
                 rendering.Transform(translation=(5, info_top)))
             self.viewer.add_geom(self.speed_diff_label)
 
+            self.TTC_diff_label = text_rendering.Text(
+                "TTC difference: {}".format(TTC_diff if TTC_diff is not None else 'None'))
+            info_top -= self.TTC_diff_label.text.content_height
+            self.TTC_diff_label.add_attr(
+                rendering.Transform(translation=(5, info_top)))
+            self.viewer.add_geom(self.TTC_diff_label)
+
             if self.action_type == 'acceleration':
                 self.action_label = text_rendering.Text(
                     'Action (acceleration): ' + str(self.action_acceleration_mappings[self.action]))
@@ -496,6 +507,8 @@ class InterceptionEnv(gym.Env):
                 "Pedal speed: {}".format(self.action_speed_mappings[self.action] if self.action is not None else "None"))
         self.speed_diff_label.set_text(
             "Speed difference: {}".format(speed_diff if required_speed is not None else 'None'))
+        self.TTC_diff_label.set_text(
+            "TTC difference: {}".format(TTC_diff if TTC_diff is not None else 'None'))
         if isRandom is not None:
             self.isRandom_label.set_text("Random action: {}".format('True' if isRandom else 'False'))
         if self.hindsight_error is not None:

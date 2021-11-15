@@ -126,7 +126,7 @@ else:
     env_prior = None
 record_stats = True
 record_interval = 25
-record_video = False
+record_video = True
 delay_frames = 9
 seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
