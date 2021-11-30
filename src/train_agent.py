@@ -60,7 +60,7 @@ def create_optimizer(opt_type, eta, momentum=0.9, epsilon=1e-08):
 # read in configuration file and extract necessary variables/constants
 options, remainder = getopt.getopt(sys.argv[1:], '', ["cfg_fname=","gpu_id="])
 # Collect arguments from argv
-# cfg_fname = "run_interception_ai.cfg"
+cfg_fname = "run_interception_ai.cfg"
 use_gpu = True
 gpu_id = 0
 for opt, arg in options:
@@ -246,6 +246,7 @@ for trial in range(n_trials):
         agent_TTC_list = []
         EFE_values_trial_list = []
         hindsight_error_list = []
+        TTC_diff_list = []
         target_front_count = 0
         subject_front_count = 0
 
@@ -474,6 +475,9 @@ for trial in range(n_trials):
                     target_front_count += 1
                 else:
                     subject_front_count += 1
+                # record TTC difference
+                TTC_diff = env.state[2] / env.state[3] - env.state[0] / env.state[1]
+                TTC_diff_list.append((ep_idx, TTC_diff))
 
         env.close()
         ### after each training episode is done ###
@@ -557,6 +561,8 @@ for trial in range(n_trials):
         np.save("{0}trial_{1}_EFE_values.npy".format(out_dir, trial), EFE_values_trial_list)
         print("==> Saving hindsight error sequence...")
         np.save("{0}trial_{1}_hindsight_errors.npy".format(out_dir, trial), hindsight_error_list)
+        print("==> Saving TTC_diff sequence...")
+        np.save("{0}trial_{1}_TTC_diffs.npy".format(out_dir, trial), TTC_diff_list)
         with open("{}who_passes_first.txt".format(out_dir), 'a+') as f:
             total_fail_cases = target_front_count + subject_front_count
             f.write("trial_{}_target_passes_first: {:.2f}%\n".format(trial, 100 * target_front_count/total_fail_cases))
