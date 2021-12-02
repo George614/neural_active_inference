@@ -86,7 +86,7 @@ def plot_TTC():
         ax.set_ylabel("Time in seconds")
         ax.set_title("TTC during a trial")
         ax.legend(loc='lower left', fontsize='xx-small', ncol=3, mode=None, borderaxespad=0.)
-        fig.savefig(out_dir + "/trial_{}_TTC_compare.png".format(i), dpi=200, bbox_inches="tight")
+        fig.savefig(out_dir + "trial_{}_TTC_compare.png".format(i), dpi=200, bbox_inches="tight")
     
 
 def plot_all_EFE():
@@ -111,11 +111,37 @@ def plot_hindsight_error():
     for i in range(len(hindsight_list)):
         fig, ax = plt.subplots(constrained_layout=True)
         # ax.plot(np.arange(0, num_episodes, 25), hindsight_list[i][:], marker="*")
-        ax.plot(np.arange(0, num_episodes), hindsight_list[i][:], marker=".", linewidth=0.5)
-        ax.set_xlabel("episodes")
+        ax.plot(np.arange(0, num_episodes), hindsight_list[i][:], marker=".", markersize=3, linewidth=0.5)
+        ax.axhline(y=0.0, color = 'red', linestyle = '--', linewidth=0.5)
+        ax.set_xlabel("Episodes")
         ax.set_ylabel("Time in seconds")
         ax.set_title("Hindsight errors throughout a trial")
-        fig.savefig(out_dir + "/trial_{}_hindsight_errors.png".format(i), dpi=200, bbox_inches="tight")
+        fig.savefig(out_dir + "trial_{}_hindsight_errors.png".format(i), dpi=200, bbox_inches="tight")
+
+
+def plot_TTC_diff():
+    TTC_diffs_dir_list = list(result_dir.glob("*TTC_diffs.npy"))
+    TTC_diffs_list = []
+    for TTC_diffs in TTC_diffs_dir_list:
+        TTC_diffs_trial = np.load(str(TTC_diffs), allow_pickle=True)
+        TTC_diffs_list.append(TTC_diffs_trial)
+
+    offsets_dir_list = list(result_dir.glob("*failed_offsets.npy"))
+    offsets_list = []
+    for offsets in offsets_dir_list:
+        offsets_trial = np.load(str(offsets), allow_pickle=True)
+        offsets_list.append(offsets_trial)
+
+    for i in range(len(TTC_diffs_list)):
+        fig, ax = plt.subplots(constrained_layout=True)
+        ax.plot(TTC_diffs_list[i][:, 0], TTC_diffs_list[i][:, 1], label='TTC_diff', color='blue', marker=".", markersize=3, linewidth=0.5)
+        ax.plot(offsets_list[i][:, 0], offsets_list[i][:, 1], label='offset', color='green', marker=".", markersize=3, linewidth=0.5)
+        ax.axhline(y=0.0, color = 'red', linestyle = '--', linewidth=0.5)
+        ax.set_xlabel("Episodes")
+        ax.set_ylabel("Time in seconds")
+        ax.set_title("TTC difference at the end of each failed episode & offset")
+        ax.legend(loc='upper right', fontsize='x-small')
+        fig.savefig(out_dir + "trial_{}_TTC_diffs.png".format(i), dpi=200, bbox_inches="tight")
 
 
 def calc_window_mean(window):
@@ -155,9 +181,11 @@ def plot_rewards():
     ax.set_title("Window-averaged rewards")
     fig.savefig(out_dir + "mean_win_rewards.png", dpi=200, bbox_inches="tight")
 
+
 plot_hindsight_error()
 plot_TTC()
-plot_rewards()
+plot_TTC_diff()
+# plot_rewards()
 # plot_all_EFE()
 
 # os.chdir(out_dir)
