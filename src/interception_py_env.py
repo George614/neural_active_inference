@@ -267,7 +267,7 @@ class InterceptionEnv(gym.Env):
 
         # hindsight error for going too fast
         if done and self.hindsight_error is None:
-            self.hindsight_error = -1.0 * target_dis/target_speed
+            self.hindsight_error = subject_dis / subject_speed - target_dis / target_speed
 
         ## update environment state and info ##
         self.state = (target_dis, target_speed, subject_dis, subject_speed)
@@ -317,7 +317,8 @@ class InterceptionEnv(gym.Env):
         # scale the environmental states to range (-1, 1)
         scaled_target_speed = 2 * (self.target_init_speed / self.target_max_speed - 0.5)
         scaled_subject_dis = 2 * (subject_init_distance / self.subject_max_position - 0.5)
-        self.scaled_state = (1, scaled_target_speed, scaled_subject_dis, -1)
+        scaled_subject_speed = 2 * (subject_init_speed / self.subject_speed_max - 0.5)
+        self.scaled_state = (1, scaled_target_speed, scaled_subject_dis, scaled_subject_speed)
         
         # calculate estimated total time for target to reach the interception point
         self.most_likely_TTCS = (self.time_to_change_speed_min + self.time_to_change_speed_max) * 0.5
