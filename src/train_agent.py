@@ -126,8 +126,9 @@ else:
     env_prior = None
 record_stats = True
 record_interval = 25
-record_video = True
-delay_frames = 9
+record_video = args.getArg("record_video").strip().lower() == 'true'
+delay_frames = int(args.getArg("delay_frames"))
+action_delay = True if delay_frames > 0 else False
 seed = np.random.randint(2 ** 32 - 1, dtype="int64").item()
 # epsilon exponential decay schedule
 epsilon_start = float(args.getArg("epsilon_start"))
@@ -249,6 +250,7 @@ for trial in range(n_trials):
         TTC_diff_list = []
         failed_offset_list = []
         offset_list = []
+        f_speed_idx_list = []
         target_front_count = 0
         subject_front_count = 0
 
@@ -271,7 +273,7 @@ for trial in range(n_trials):
         if hindsight_learn:  # if use predictive component to learn from hindsight error
             offset = pplModel.infer_offset(init_condition)
             offset = offset.numpy().squeeze()
-        if delay_frames > 0:
+        if action_delay:
             action_buffer = deque()
             obv_buffer = deque()
             ep_frame_idx = -1
@@ -309,22 +311,26 @@ for trial in range(n_trials):
                 action = pplModel.act(obv)
             action = action.numpy().squeeze()
 
-            if use_env_prior: # if prior function is used
-                if hindsight_learn:  # if hindsight is used, also used delayed action
-                    if ep_frame_idx <= delay_frames:
-                        action_buffer.append(action)
-                        next_obv, reward, done, info = env.advance()
-                        obv_buffer.append(next_obv)
-                    else:
-                        action_buffer.append(action)
-                        delayed_action = action_buffer.popleft()
-                        next_obv, reward, done, obv_prior, info = env.step(delayed_action, offset)
-                        obv_buffer.append(next_obv)
-                        # next_obv, reward, done, obv_prior, info = env.step(action, offset) # normal step
+            if action_delay:
+                if ep_frame_idx <= delay_frames:
+                    action_buffer.append(action)
+                    next_obv, reward, done, info = env.advance()
+                    obv_buffer.append(next_obv)
                 else:
-                    next_obv, reward, done, obv_prior, info = env.step(action)
+                    action_buffer.append(action)
+                    delayed_action = action_buffer.popleft()
+                    if use_env_prior and hindsight_learn:
+                        next_obv, reward, done, obv_prior, info = env.step(delayed_action, offset)
+                    elif use_env_prior and not hindsight_learn:
+                        next_obv, reward, done, obv_prior, info = env.step(delayed_action)
+                    else:
+                        next_obv, reward, done, info = env.step(delayed_action)
+                    obv_buffer.append(next_obv)
             else:
-                next_obv, reward, done, info = env.step(action)
+                if use_env_prior:
+                    next_obv, reward, done, obv_prior, info = env.step(action)
+                else:
+                    next_obv, reward, done, info = env.step(action)
 
             if record_stats and ep_idx % record_interval == 0:
                 # calculate and record TTC and write 1 frame to the video
@@ -337,6 +343,7 @@ for trial in range(n_trials):
                     target_1st_order_TTC_list.append(target_1st_order_TTC)
                     target_actual_mean_TTC_list.append(target_actual_mean_TTC)
                     agent_TTC_list.append(agent_TTC)
+                    f_speed_idx_list.append(f_speed_idx)
                 if record_video:
                     img = env.render(mode='rgb_array', offset=offset, isRandom=isRandom)
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -368,16 +375,21 @@ for trial in range(n_trials):
                         grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, reward=batch_reward)
                     per_buffer.update_priorities(batch_indices, priorities.numpy())
             else:
-                if use_env_prior:
-                    if delay_frames > 0 and ep_frame_idx <= delay_frames:
+                if action_delay:
+                    if ep_frame_idx <= delay_frames:
                         pass
-                    elif delay_frames > 0 and ep_frame_idx > delay_frames:
-                        origin_obv = obv_buffer.popleft()
-                        replay_buffer.push(origin_obv, delayed_action, reward, next_obv, done, obv_prior)
                     else:
-                        replay_buffer.push(observation, action, reward, next_obv, done, obv_prior)
+                        origin_obv = obv_buffer.popleft()
+                        if use_env_prior:
+                            replay_buffer.push(origin_obv, delayed_action, reward, next_obv, done, obv_prior)
+                        else:
+                            replay_buffer.push(origin_obv, delayed_action, reward, next_obv, done)
                 else:
-                    replay_buffer.push(observation, action, reward, next_obv, done)
+                    if use_env_prior:
+                        replay_buffer.push(observation, action, reward, next_obv, done, obv_prior)
+                    else:
+                        replay_buffer.push(observation, action, reward, next_obv, done)
+                
                 observation = next_obv
 
                 if keep_expert_batch:
@@ -472,16 +484,16 @@ for trial in range(n_trials):
             # record hindsight error
             hindsight_error_list.append(env.hindsight_error)
             offset_list.append(offset)
+        if reward == 0:
             # record who passes the interception point first
-            if reward == 0:
-                if env.state[0] < env.state[2]:
-                    target_front_count += 1
-                else:
-                    subject_front_count += 1
-                # record TTC difference
-                TTC_diff = env.state[2] / env.state[3] - env.state[0] / env.state[1]
-                TTC_diff_list.append((ep_idx, TTC_diff))
-                failed_offset_list.append((ep_idx, offset))
+            if env.state[0] < env.state[2]:
+                target_front_count += 1
+            else:
+                subject_front_count += 1
+            # record TTC difference
+            TTC_diff = env.state[2] / env.state[3] - env.state[0] / env.state[1]
+            TTC_diff_list.append((ep_idx, TTC_diff))
+            failed_offset_list.append((ep_idx, offset))
 
         env.close()
         ### after each training episode is done ###
@@ -558,7 +570,7 @@ for trial in range(n_trials):
     save_object(pplModel, fname="{0}.agent".format(agent_fname))
 
     if record_stats:
-        trial_TTCs = np.vstack((target_1st_order_TTC_list, target_actual_mean_TTC_list, agent_TTC_list))
+        trial_TTCs = np.vstack((target_1st_order_TTC_list, target_actual_mean_TTC_list, agent_TTC_list, f_speed_idx_list))
         print("==> Saving TTC sequence...")
         np.save("{0}trial_{1}_TTCs.npy".format(out_dir, trial), trial_TTCs)
         print("==> Saving EFE sequence...")
