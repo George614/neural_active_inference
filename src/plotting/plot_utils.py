@@ -87,6 +87,7 @@ def plot_TTC():
         ax.set_title("TTC during a trial")
         ax.legend(loc='lower left', fontsize='xx-small', ncol=3, mode=None, borderaxespad=0.)
         fig.savefig(out_dir + "trial_{}_TTC_compare.png".format(i), dpi=200, bbox_inches="tight")
+        plt.close(fig)
     
 
 def plot_all_EFE():
@@ -117,6 +118,7 @@ def plot_hindsight_error():
         ax.set_ylabel("Time in seconds")
         ax.set_title("Hindsight errors throughout a trial")
         fig.savefig(out_dir + "trial_{}_hindsight_errors.png".format(i), dpi=200, bbox_inches="tight")
+        plt.close(fig)
 
 
 def plot_TTC_diff():
@@ -142,6 +144,7 @@ def plot_TTC_diff():
         ax.set_title("TTC difference at the end of each failed episode & offset")
         ax.legend(loc='upper right', fontsize='x-small')
         fig.savefig(out_dir + "trial_{}_TTC_diffs.png".format(i), dpi=200, bbox_inches="tight")
+        plt.close(fig)
 
 
 def calc_window_mean(window):
@@ -169,6 +172,7 @@ def plot_rewards():
         plt.xlabel("Episodes")
         plt.title("Window-averaged Rewards")
         fig.savefig(out_dir + "trial_{}_win_avg.png".format(tr), dpi=200)
+        plt.close(fig)
     win_reward_np = np.asarray(win_reward_list)
     fig, ax = plt.subplots()
     mean_rewards = np.mean(win_reward_np, axis=0)
@@ -180,6 +184,7 @@ def plot_rewards():
     ax.set_xlabel("Number of episodes")
     ax.set_title("Window-averaged rewards")
     fig.savefig(out_dir + "mean_win_rewards.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
 
 
 plot_hindsight_error()

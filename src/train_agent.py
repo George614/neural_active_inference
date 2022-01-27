@@ -291,7 +291,8 @@ for trial in range(n_trials):
         episode_reward = 0
         while not done:
             frame_idx += 1
-            ep_frame_idx += 1
+            if action_delay:
+                ep_frame_idx += 1
             if epsilon_greedy:
                 epsilon = epsilon_by_frame(frame_idx)
             else:
