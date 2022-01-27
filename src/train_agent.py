@@ -117,8 +117,7 @@ equal_replay_batches = args.getArg("equal_replay_batches").strip().lower() == 't
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
 hindsight_learn = args.getArg("hindsight_learn").strip().lower() == 'true'
-if hindsight_learn:
-    perfect_prior = False
+perfect_prior = False if hindsight_learn else True
 use_env_prior = False if args.getArg("env_prior").strip().lower() == 'none' else True
 if use_env_prior:
     env_prior = args.getArg("env_prior")
@@ -267,7 +266,6 @@ for trial in range(n_trials):
         if args.getArg("env_name") == "InterceptionEnv":
             f_speed_idx = np.random.randint(3)
             env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
-            env.seed(seed=seed)
         observation = env.reset()
         init_condition = tf.expand_dims(observation[:2], axis=0)
         if hindsight_learn:  # if use predictive component to learn from hindsight error
@@ -493,7 +491,8 @@ for trial in range(n_trials):
             # record TTC difference
             TTC_diff = env.state[2] / env.state[3] - env.state[0] / env.state[1]
             TTC_diff_list.append((ep_idx, TTC_diff))
-            failed_offset_list.append((ep_idx, offset))
+            if hindsight_learn:
+                failed_offset_list.append((ep_idx, offset))
 
         env.close()
         ### after each training episode is done ###
