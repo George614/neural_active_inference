@@ -326,7 +326,9 @@ for trial in range(n_trials):
                         next_obv, reward, done, info = env.step(delayed_action)
                     obv_buffer.append(next_obv)
             else:
-                if use_env_prior:
+                if use_env_prior and hindsight_learn:
+                    next_obv, reward, done, obv_prior, info = env.step(action, offset)
+                elif use_env_prior and not hindsight_learn:
                     next_obv, reward, done, obv_prior, info = env.step(action)
                 else:
                     next_obv, reward, done, info = env.step(action)
@@ -335,7 +337,7 @@ for trial in range(n_trials):
                 # calculate and record TTC and write 1 frame to the video
                 speed_phase = info['speed_phase']
                 if speed_phase == 1 and not TTC_calculated:
-                    target_1st_order_TTC = env.state[0] / env.target_init_speed
+                    target_1st_order_TTC = env.state[0] / env.state[1]
                     target_actual_mean_TTC = info['target_TTC']
                     agent_TTC = env.state[2] / env.state[3]
                     TTC_calculated = True
