@@ -23,18 +23,21 @@ def calc_window_mean(window):
     return mu
 
 parent_dir = "D:/Projects/neural_active_inference/exp/interception/qai/"
-exp_dir_list = ["negRti_posRte_mse_4D_obv_w_speedchg_newPrior_noSlope_DQNhyperP_512net_noL2Reg_relu_learnSche_3k",
-				"negRti_posRte_rho0.5_mse_4D_obv_w_speedchg_newPrior_DQNhyperP_512net_noL2Reg_relu_learnSche_3k",
-				"negRti_posRte_rho0.25_mse_4D_obv_w_speedchg_newPrior_DQNhyperP_512net_noL2Reg_relu_learnSche_3k",
-				"negRti_posRte_rho0.125_mse_4D_obv_w_speedchg_newPrior_DQNhyperP_512net_noL2Reg_relu_learnSche_3k",
-				"negRti_noRte_mse_4D_obv_w_speedchg_newPrior_noSlope_DQNhyperP_512net_noL2Reg_relu_learnSche_3k"]
+exp_dir_list = ["pedalLag_2.0_noEpsilon_hindsightError_DQNhyperP_512net_relu_learnSche_2k",
+				"pedalLag_1.5_noEpsilon_hindsightError_DQNhyperP_512net_relu_learnSche_2k",
+				"pedalLag_1.2_noEpsilon_hindsightError_DQNhyperP_512net_relu_learnSche_2k",
+				"pedalLag_0.8_hindsightError_AIFRecog_DQNhyperP_512net_relu_learnSche_2k",
+				"pedalLag_0.6_hindsightError_AIFRecog_DQNhyperP_512net_relu_learnSche_2k",
+				"pedalLag_0.4_hindsightError_AIFRecog_DQNhyperP_512net_relu_learnSche_2k"]
 input_dirs = [parent_dir + exp_dir for exp_dir in exp_dir_list]
 win_reward_np_list = []
+pass_front_pert_list = []
+plot_front_pert = True
 
 for input_dir in input_dirs:
 	result_dir = Path(input_dir)
 	reward_list = []
-	for _, npystr in enumerate(list(result_dir.glob("*.npy"))):
+	for _, npystr in enumerate(list(result_dir.glob("*R.npy"))):
 	    rewards = np.load(str(npystr))
 	    reward_list.append(rewards)
 	win_reward_list = []
@@ -51,31 +54,51 @@ for input_dir in input_dirs:
 	    
 	win_reward_np = np.asarray(win_reward_list)
 	win_reward_np_list.append(win_reward_np)
+	if plot_front_pert:
+		with open(input_dir + "/who_passes_first.txt", 'r') as f:
+			percent_data = f.readlines()
+		sub_str_list = percent_data[1::2]
+		sub_percent = [float(strv.split(' ')[1][:-2]) for strv in sub_str_list]
+		pass_front_pert_list.append(np.asarray(sub_percent))
 
 
 fig, ax = plt.subplots()
 mean_rewards = np.mean(win_reward_np_list[0], axis=0)
 std_rewards = np.std(win_reward_np_list[0], axis=0)
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='red', label='AIF_rho_1.0', linewidth=0.5)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='red', label='pedalLag_2.0', linewidth=0.5)
 ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='pink', alpha=0.25)
 mean_rewards = np.mean(win_reward_np_list[1], axis=0)
 std_rewards = np.std(win_reward_np_list[1], axis=0)
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='blue', label='AIF_rho_0.5', linewidth=0.5)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='blue', label='pedalLag_1.5', linewidth=0.5)
 ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='cyan', alpha=0.25)
 mean_rewards = np.mean(win_reward_np_list[2], axis=0)
 std_rewards = np.std(win_reward_np_list[2], axis=0)
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='green', label='AIF_rho_0.25', linewidth=0.5)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='green', label='pedalLag_1.2', linewidth=0.5)
 ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='lime', alpha=0.25)
 mean_rewards = np.mean(win_reward_np_list[3], axis=0)
 std_rewards = np.std(win_reward_np_list[3], axis=0)
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='purple', label='AIF_rho_0.125', linewidth=0.5)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='purple', label='pedalLag_0.8', linewidth=0.5)
 ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='violet', alpha=0.25)
 mean_rewards = np.mean(win_reward_np_list[4], axis=0)
 std_rewards = np.std(win_reward_np_list[4], axis=0)
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='gold', label='AIF_rho_0.0', linewidth=0.5)
-ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='yellow', alpha=0.25)
-ax.legend(bbox_to_anchor=(0., 1.1, 1., .2), loc='lower left', fontsize='small', ncol=3, mode='expand', borderaxespad=0.)
-ax.set_ylabel("Rewards")
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='orange', label='pedalLag_0.6', linewidth=0.5)
+ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='gold', alpha=0.25)
+mean_rewards = np.mean(win_reward_np_list[5], axis=0)
+std_rewards = np.std(win_reward_np_list[5], axis=0)
+ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='royalblue', label='pedalLag_0.4', linewidth=0.5)
+ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='cornflowerblue', alpha=0.25)
+ax.legend(bbox_to_anchor=(0., 1.02, 1., .2), loc='lower left', fontsize='small', ncol=3, mode='expand', borderaxespad=0.)
+ax.set_ylabel("Mean window-averaged rewards")
 ax.set_xlabel("Number of episodes")
-ax.set_title("Window-averaged rewards")
-fig.savefig(os.getcwd() + "/AIF_rho_compare.png", dpi=200, bbox_inches="tight")
+# ax.set_title("Window-averaged rewards")
+fig.savefig(os.getcwd() + "/pedalLag_compare.png", dpi=200, bbox_inches="tight")
+
+if plot_front_pert:
+	fig = plt.figure()
+	ax = fig.add_axes([0, 0, 1, 1])
+	boxplot = ax.boxplot(pass_front_pert_list, notch=True)
+	ax.set_xticklabels(['2.0', '1.5','1.2', '0.8', '0.6', '0.4'])
+	ax.set_xlabel("Pedal lag coefficient")
+	ax.set_ylabel("Percentage")
+	ax.set_title("Ratio of subject passing in front of target")
+	fig.savefig(os.getcwd() + "/pass_front_compare.png", dpi=200, bbox_inches="tight")
