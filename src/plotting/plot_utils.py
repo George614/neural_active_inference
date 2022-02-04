@@ -88,7 +88,39 @@ def plot_TTC():
         ax.legend(loc='lower left', fontsize='xx-small', ncol=3, mode=None, borderaxespad=0.)
         fig.savefig(out_dir + "trial_{}_TTC_compare.png".format(i), dpi=200, bbox_inches="tight")
         plt.close(fig)
-    
+
+    fspeed0list = []
+    fspeed1list = []
+    fspeed2list = []
+    for trial_TTCs in TTC_list:
+        fspeed_idx = trial_TTCs[3,:]
+        for i in range(len(fspeed_idx)):
+            if fspeed_idx[i] == 0:
+                fspeed0list.append(trial_TTCs[:3, i])
+            elif fspeed_idx[i] == 1:
+                fspeed1list.append(trial_TTCs[:3, i])
+            else:
+                fspeed2list.append(trial_TTCs[:3, i])
+                
+    fspeed0np = np.asarray(fspeed0list)
+    fspeed1np = np.asarray(fspeed1list)
+    fspeed2np = np.asarray(fspeed2list)
+    import seaborn as sns
+    import pandas as pd
+    df0 = pd.DataFrame(fspeed0np, columns=["target first order", "target actual", "subject"])
+    df1 = pd.DataFrame(fspeed1np, columns=["target first order", "target actual", "subject"])
+    df2 = pd.DataFrame(fspeed2np, columns=["target first order", "target actual", "subject"])
+    df0['Initial speed'] = np.repeat([11.25], len(df0))
+    df1['Initial speed'] = np.repeat([9.47], len(df1))
+    df2['Initial speed'] = np.repeat([8.18], len(df2))
+    df_combined = pd.concat([df0, df1, df2], axis=0)
+    dd = pd.melt(df_combined, id_vars=['Initial speed'], value_vars=['target first order','target actual', 'subject'], var_name='TTC Type')
+    fig = plt.figure()
+    ax = sns.boxplot(x='Initial speed', y='value', data=dd, hue='TTC Type')
+    ax.set_ylabel('Time (s)')
+    fig.savefig(out_dir + "TTC_boxplot.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
 
 def plot_all_EFE():
     EFE_list = list(result_dir.glob("*EFE_values.npy"))
@@ -137,7 +169,8 @@ def plot_TTC_diff():
     for i in range(len(TTC_diffs_list)):
         fig, ax = plt.subplots(constrained_layout=True)
         ax.plot(TTC_diffs_list[i][:, 0], TTC_diffs_list[i][:, 1], label='TTC_diff', color='blue', marker=".", markersize=3, linewidth=0.5)
-        ax.plot(offsets_list[i][:, 0], offsets_list[i][:, 1], label='offset', color='green', marker=".", markersize=3, linewidth=0.5)
+        if len(offsets_list[i]) > 0:
+            ax.plot(offsets_list[i][:, 0], offsets_list[i][:, 1], label='offset', color='green', marker=".", markersize=3, linewidth=0.5)
         ax.axhline(y=0.0, color = 'red', linestyle = '--', linewidth=0.5)
         ax.set_xlabel("Episodes")
         ax.set_ylabel("Time in seconds")
