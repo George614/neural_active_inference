@@ -77,7 +77,7 @@ if use_gpu:
     os.environ["CUDA_VISIBLE_DEVICES"]="{0}".format(mid)
     gpu_tag = '/GPU:0'
     gpu_devices = tf.config.experimental.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(gpu_devices[mid], True)
+    tf.config.experimental.set_memory_growth(gpu_devices[0], True)
 else:
     os.environ["CUDA_VISIBLE_DEVICES"]="-1"
     gpu_tag = '/CPU:0'
