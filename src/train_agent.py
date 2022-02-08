@@ -62,7 +62,7 @@ options, remainder = getopt.getopt(sys.argv[1:], '', ["cfg_fname=","gpu_id="])
 # Collect arguments from argv
 cfg_fname = "run_interception_ai.cfg"
 use_gpu = True
-gpu_id = 0
+# gpu_id = 0
 for opt, arg in options:
     if opt in ("--cfg_fname"):
         cfg_fname = arg.strip()
@@ -117,7 +117,7 @@ equal_replay_batches = args.getArg("equal_replay_batches").strip().lower() == 't
 vae_reg = False
 epistemic_anneal = args.getArg("epistemic_anneal").strip().lower() == 'true'
 hindsight_learn = args.getArg("hindsight_learn").strip().lower() == 'true'
-perfect_prior = False if hindsight_learn else True
+perfect_prior = False
 use_env_prior = False if args.getArg("env_prior").strip().lower() == 'none' else True
 if use_env_prior:
     env_prior = args.getArg("env_prior")
