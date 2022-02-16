@@ -2,6 +2,7 @@ import os
 import logging
 import sys, getopt, optparse
 import pickle
+import shutil
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 import tensorflow as tf
@@ -87,6 +88,7 @@ n_trials = int(args.getArg("n_trials"))
 out_dir = args.getArg("out_dir") #"/home/agoroot/IdeaProjects/playful_learning/exp/mcar/act_inf1/"
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
+shutil.copy(cfg_fname, out_dir)
 prior_model_save_path = None
 if args.hasArg("prior_model_save_path"):
     prior_model_save_path = args.getArg("prior_model_save_path") #"/home/agoroot/IdeaProjects/playful_learning/exp/mcar/prior/prior.agent"
@@ -200,7 +202,8 @@ if expert_data_path is not None:
 
 all_win_mean = []
 
-for trial in range(n_trials):
+start_trial = 0
+for trial in range(start_trial, n_trials):
     print(" >> Setting up experience replay buffers...")
     if use_per_buffer:
         per_buffer = NaivePrioritizedBuffer(buffer_size, prob_alpha=prob_alpha)
