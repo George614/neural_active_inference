@@ -374,7 +374,7 @@ for trial in range(start_trial, n_trials):
                         [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_indices, batch_weights] = batch_data
                     batch_action = tf.one_hot(batch_action, depth=dim_a)
                     if use_env_prior:
-                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, obv_prior=batch_prior)
+                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, obv_prior=batch_prior, reward=batch_reward)
                     else:
                         grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, reward=batch_reward)
                     per_buffer.update_priorities(batch_indices, priorities.numpy())
@@ -422,7 +422,7 @@ for trial in range(start_trial, n_trials):
                             if use_env_prior:
                                 [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior] = batch_data
                                 batch_action = tf.one_hot(batch_action, depth=dim_a)
-                                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, obv_prior=batch_prior)
+                                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, obv_prior=batch_prior, reward=batch_reward)
                             else:
                                 [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done] = batch_data
                                 batch_action = tf.one_hot(batch_action, depth=dim_a)

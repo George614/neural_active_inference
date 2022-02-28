@@ -36,6 +36,7 @@ class QAIModel:
         self.rho = float(args.getArg("rho"))
         self.use_prior_space = args.getArg("env_prior").strip().lower() == 'prior_error'
         self.use_combined_nn = args.getArg("combined_nn").strip().lower() == 'true'
+        self.use_bonus = args.getArg("use_bonus").strip().lower() == 'true'
         self.EFE_bound = 1.0
         self.max_R_ti = 1.0
         self.min_R_ti = 0.01 #-1.0 for GLL #0.01
@@ -215,7 +216,7 @@ class QAIModel:
                             R_ti = -1.0 * tf.expand_dims(error_prior, axis=1)
                         else:  # calculate instrumental term in observation space
                             R_ti = -1.0 * mse(x_true=obv_next, x_pred=obv_prior, keep_batch=True)
-                    if self.normalize_signals is True:
+                    if self.normalize_signals:
                         a = -self.EFE_bound
                         b = self.EFE_bound
                         self.max_R_ti = max(self.max_R_ti, float(tf.reduce_max(R_ti)))
@@ -224,6 +225,8 @@ class QAIModel:
                     else:
                         # clip the instrumental value
                         R_ti = tf.clip_by_value(R_ti, -50.0, 50.0)
+                    if self.use_bonus:
+                        R_ti = R_ti + tf.expand_dims(reward, axis=1) * 100
                 elif self.instru_term == "prior_global":
                     R_ti = -1.0 * mse(x_true=obv_next, x_pred=self.global_mu, keep_batch=True)
                     # if self.normalize_signals is True:
