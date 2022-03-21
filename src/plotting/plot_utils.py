@@ -7,15 +7,17 @@ Plot figures and generate videos after training.
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
 from matplotlib.animation import FuncAnimation
 from pathlib import Path
 from collections import deque
 import subprocess
 
-out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/25trials/delayed_action_noEpsGreedy_hindsightError_DQNhyperP_512net_relu_learnSche_2k_25trials/"
+out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_InstOnly_hdst3x_512net_relu_learnSche_3k_bonusRW/"
 result_dir = Path(out_dir)
 num_trials = 5
-num_episodes = 2000
+num_episodes = 3000
 
 
 def plot_efe(efe_list, trial_num, episode_num):
@@ -66,13 +68,14 @@ def combine_videos(trial_num, episode_num):
     print("Done")
 
 
-def plot_TTC():
-    TTC_dir_list = list(result_dir.glob("*TTCs.npy"))
-    TTC_list = []
-    for ttc in TTC_dir_list:
-        TTC_trial = np.load(str(ttc), allow_pickle=True)
-        TTC_list.append(TTC_trial)
-
+def plot_TTC_trial_progress(out_dir, TTC_list=None):
+    if TTC_list is None:
+        out_path = Path(out_dir)
+        TTC_dir_list = list(out_path.glob("*TTCs.npy"))
+        TTC_list = []
+        for ttc in TTC_dir_list:
+            TTC_trial = np.load(str(ttc), allow_pickle=True)
+            TTC_list.append(TTC_trial)    
     for i in range(len(TTC_list)):
         fig, ax = plt.subplots(constrained_layout=True)
         ax.set_ylim(0.0, 3.0)
@@ -81,40 +84,46 @@ def plot_TTC():
         # ax.scatter(np.arange(0, num_episodes, 25), TTC_list[i][2,:], marker=".", label='subject')
         ax.scatter(np.arange(TTC_list[i].shape[1]), TTC_list[i][0,:], marker="*", label='target_1st_order')
         ax.scatter(np.arange(TTC_list[i].shape[1]), TTC_list[i][1,:], marker="_", label='target_actual')
-        ax.scatter(np.arange(TTC_list[i].shape[1]), TTC_list[i][2,:], marker=".", label='subject')
+        ax.scatter(np.arange(TTC_list[i].shape[1]), TTC_list[i][2,:], marker=".", label='agent')
         ax.set_xlabel("checkpoints") # checkpoints are taken every 25 episodes
         ax.set_ylabel("Time in seconds")
         ax.set_title("TTC during a trial")
         ax.legend(loc='lower left', fontsize='xx-small', ncol=3, mode=None, borderaxespad=0.)
-        fig.savefig(out_dir + "trial_{}_TTC_compare.png".format(i), dpi=200, bbox_inches="tight")
+        fig.savefig(out_dir + "trial_{}_TTC_progress.png".format(i), dpi=200, bbox_inches="tight")
         plt.close(fig)
 
+
+def plot_TTC_boxplot(out_dir, TTC_list=None):
+    if TTC_list is None:
+        out_path = Path(out_dir)
+        TTC_dir_list = list(out_path.glob("*TTCs.npy"))
+        TTC_list = []
+        for ttc in TTC_dir_list:
+            TTC_trial = np.load(str(ttc), allow_pickle=True)
+            TTC_list.append(TTC_trial)
     fspeed0list = []
     fspeed1list = []
     fspeed2list = []
     for trial_TTCs in TTC_list:
-        fspeed_idx = trial_TTCs[3,:]
-        for i in range(len(fspeed_idx)):
-            if fspeed_idx[i] == 0:
+        for i in range(trial_TTCs.shape[1]):
+            fspeed_idx = trial_TTCs[3, i]
+            if fspeed_idx == 0:
                 fspeed0list.append(trial_TTCs[:3, i])
-            elif fspeed_idx[i] == 1:
+            elif fspeed_idx == 1:
                 fspeed1list.append(trial_TTCs[:3, i])
             else:
                 fspeed2list.append(trial_TTCs[:3, i])
-                
     fspeed0np = np.asarray(fspeed0list)
     fspeed1np = np.asarray(fspeed1list)
     fspeed2np = np.asarray(fspeed2list)
-    import seaborn as sns
-    import pandas as pd
-    df0 = pd.DataFrame(fspeed0np, columns=["target first order", "target actual", "subject"])
-    df1 = pd.DataFrame(fspeed1np, columns=["target first order", "target actual", "subject"])
-    df2 = pd.DataFrame(fspeed2np, columns=["target first order", "target actual", "subject"])
+    df0 = pd.DataFrame(fspeed0np, columns=["target first order", "target actual", "agent"])
+    df1 = pd.DataFrame(fspeed1np, columns=["target first order", "target actual", "agent"])
+    df2 = pd.DataFrame(fspeed2np, columns=["target first order", "target actual", "agent"])
     df0['Initial speed'] = np.repeat([11.25], len(df0))
     df1['Initial speed'] = np.repeat([9.47], len(df1))
     df2['Initial speed'] = np.repeat([8.18], len(df2))
     df_combined = pd.concat([df0, df1, df2], axis=0)
-    dd = pd.melt(df_combined, id_vars=['Initial speed'], value_vars=['target first order','target actual', 'subject'], var_name='TTC Type')
+    dd = pd.melt(df_combined, id_vars=['Initial speed'], value_vars=['target first order','target actual', 'agent'], var_name='TTC Type')
     fig = plt.figure()
     ax = sns.boxplot(x='Initial speed', y='value', data=dd, hue='TTC Type')
     ax.set_ylabel('Time (s)')
@@ -222,15 +231,17 @@ def plot_rewards():
     plt.close(fig)
 
 
-plot_hindsight_error()
-plot_TTC()
-plot_TTC_diff()
-plot_rewards()
-# plot_all_EFE()
+if __name__ == '__main__':
+    plot_hindsight_error()
+    plot_TTC_boxplot()
+    plot_TTC_trial_progress()
+    plot_TTC_diff()
+    plot_rewards()
+    # plot_all_EFE()
 
-# os.chdir(out_dir)
-# for tr in range(num_trials):
-#     for ep in range(num_episodes//25):
-#         combine_videos(tr, ep*25)
-        
-# print("All gifs are created.")
+    # os.chdir(out_dir)
+    # for tr in range(num_trials):
+    #     for ep in range(num_episodes//25):
+    #         combine_videos(tr, ep*25)
+            
+    # print("All gifs are created.")
