@@ -160,10 +160,11 @@ gradient_steps = int(args.getArg("gradient_steps"))
 
 ### initialize optimizer and environment ###
 opt_type = args.getArg("optimizer").strip().lower()
-lr  = tf.Variable( float(args.getArg("learning_rate")) )
+lr  = tf.Variable(float(args.getArg("learning_rate")))
 learning_rate_decay = float(args.getArg("learning_rate_decay"))
+pc_lr_multiplier = float(args.getArg("pc_lr_multiplier"))
 opt = create_optimizer(opt_type, eta=lr, epsilon=1e-5)
-opt2 = create_optimizer(opt_type, eta=lr*10, epsilon=1e-5)
+opt2 = create_optimizer(opt_type, eta=lr * pc_lr_multiplier, epsilon=1e-5)
 
 if args.getArg("env_name") == "InterceptionEnv":
     f_speed_idx = int(args.getArg("f_speed_idx"))
@@ -202,7 +203,10 @@ if expert_data_path is not None:
 
 all_win_mean = []
 
-start_trial = 0
+if args.hasArg("start_trial"):
+    start_trial = int(args.getArg("start_trial"))
+else:
+    start_trial = 0
 for trial in range(start_trial, n_trials):
     print(" >> Setting up experience replay buffers...")
     if use_per_buffer:
@@ -607,6 +611,7 @@ if plot_rewards:
         plt.xlabel("Episodes")
         plt.ylabel("Rewards")
         fig.savefig(str(result_dir)+"/trial_{}.png".format(i), dpi=200)
+        plt.close(fig)
     reward_list = np.asarray(reward_list)
     mean_rewards = np.mean(reward_list, axis=0)
     std_rewards = np.std(reward_list, axis=0)
@@ -618,6 +623,7 @@ if plot_rewards:
     ax.set_xlabel("Number of episodes")
     ax.set_title("Episode rewards")
     fig.savefig(str(result_dir) + "/mean_rewards.png", dpi=200)
+    plt.close(fig)
     
     for tr in range(len(all_win_mean)):
         fig = plt.figure()
@@ -625,6 +631,7 @@ if plot_rewards:
         plt.xlabel("Episodes")
         plt.ylabel("Window-averaged Rewards")
         fig.savefig(str(result_dir)+"/trial_{}_win_avg.png".format(tr), dpi=200)
+        plt.close(fig)
     all_win_mean = np.stack(all_win_mean)
     mean_rewards = np.mean(all_win_mean, axis=0)
     std_rewards = np.std(all_win_mean, axis=0)
@@ -636,3 +643,4 @@ if plot_rewards:
     ax.set_xlabel("Number of episodes")
     ax.set_title("Window-averaged rewards")
     fig.savefig(str(result_dir) + "/mean_win_rewards.png", dpi=200)
+    plt.close(fig)
