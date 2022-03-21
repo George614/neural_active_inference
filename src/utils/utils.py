@@ -114,6 +114,9 @@ def decide_fun(fun_type):
     elif fun_type == "relu":
         fx = tf.nn.relu
         d_fx = d_relu
+    elif fun_type == "swish":
+        fx = tf.nn.swish
+        d_fx = d_identity
     elif fun_type == "softsign":
         fx = tf.nn.softsign
         d_fx = d_identity
