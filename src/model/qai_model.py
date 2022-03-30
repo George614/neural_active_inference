@@ -186,7 +186,21 @@ class QAIModel:
 
         return grads_pc, loss_h_reconst, loss_h_error
 
-    def train_step(self, obv_t, obv_next, action, done, weights=None, reward=None, obv_prior=None):
+    def infer_epistemic(self, obv_t, obv_next, action=None):
+        if self.use_combined_nn:
+            # use the intermediate neural activation as inputs to the predictive model
+            hidden_vars, _, _ = self.recognition.predict(obv_t)
+            o_next_hat, _, _ = self.obv_head.predict(hidden_vars)
+        else:
+            ### run s_t and a_t through transition model ###
+            o_next_hat, _, _ = self.transition.predict(tf.concat([obv_t, action], axis=-1))
+        delta = obv_next - o_next_hat
+        R_te = tf.reduce_sum(delta * delta, axis=1, keepdims=True)
+        # clip the epistemic value
+        R_te = tf.clip_by_value(R_te, -50.0, 50.0)
+        return R_te
+
+    def train_step(self, obv_t, obv_next, action, done, R_te, weights=None, reward=None, obv_prior=None):
         with tf.GradientTape(persistent=True) as tape:
             if self.use_combined_nn:
                 hidden_vars, _, _ = self.recognition.predict(obv_t)
@@ -229,40 +243,13 @@ class QAIModel:
                         R_ti = R_ti + tf.expand_dims(reward, axis=1) * 100
                 elif self.instru_term == "prior_global":
                     R_ti = -1.0 * mse(x_true=obv_next, x_pred=self.global_mu, keep_batch=True)
-                    # if self.normalize_signals is True:
-                    #     a = -self.EFE_bound
-                    #     b = self.EFE_bound
-                    #     self.max_R_ti = max(self.max_R_ti, float(tf.reduce_max(R_ti)))
-                    #     self.min_R_ti = min(self.min_R_ti, float(tf.reduce_min(R_ti)))
-                    #     R_ti = ((R_ti - self.min_R_ti) * (b - a))/(self.max_R_ti - self.min_R_ti) + a
-                    # else:
-                    #     # clip the instrumental value
-                    #     R_ti = tf.clip_by_value(R_ti, -50.0, 50.0)
                 else:
                     R_ti = reward
                     if len(R_ti.shape) < 2:
                         R_ti = tf.expand_dims(R_ti, axis=1)
-                ### epistemic term ###
-                delta = (obv_next - o_next_tran_mu)
-                R_te = tf.reduce_sum(delta * delta, axis=1, keepdims=True)
-                if self.normalize_signals is True:
-                    a = -self.EFE_bound
-                    b = self.EFE_bound
-                    self.max_R_te = max(self.max_R_te, float(tf.reduce_max(R_te)))
-                    self.min_R_te = min(self.min_R_te, float(tf.reduce_min(R_te)))
-                    R_te = ((R_te - self.min_R_te) * (b - a))/(self.max_R_te - self.min_R_te) + a
-                else:
-                    # clip the epistemic value
-                    R_te = tf.clip_by_value(R_te, -50.0, 50.0)
 
                 # the nagative EFE value, i.e. the reward. Note the sign here
                 R_t = R_ti + self.rho * R_te
-                # if self.normalize_signals is True:
-                #     a = -self.EFE_bound
-                #     b = self.EFE_bound
-                #     self.max_R_t = max(self.max_R_t, float(tf.reduce_max(R_t)))
-                #     self.min_R_t = min(self.min_R_t, float(tf.reduce_min(R_t)))
-                #     R_t = ((R_t - self.min_R_t) * (b - a)) / (self.max_R_t - self.min_R_t) + a
 
             ## model reconstruction loss ##
             loss_reconst = mse(x_true=obv_next, x_pred=o_next_tran_mu, keep_batch=True) #g_nll(obv_next, o_next_mu, o_next_std * o_next_std)
@@ -279,7 +266,7 @@ class QAIModel:
             
             done = tf.expand_dims(done, axis=1)
 
-            if self.use_sum_q is True:
+            if self.use_sum_q:
                 # take the old EFE values given action indices
                 efe_old = tf.math.reduce_sum(efe_t * action, axis=-1)
                 with tape.stop_recording():
@@ -321,8 +308,7 @@ class QAIModel:
         grads_model = tape.gradient(loss_model, self.param_var)
         grads_efe = tape.gradient(loss_efe, self.param_var)
 
-        #Ns = obv_t.shape[0]
         if weights is not None:
-            return grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities
+            return grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, efe_t, efe_target, priorities
 
-        return grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target
+        return grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, efe_t, efe_target
