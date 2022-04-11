@@ -11,34 +11,54 @@ class ReplayBuffer(object):
         self.buffer = deque(maxlen=capacity)
         random.seed(seed)
         self.store_prior = False
+        self.store_Rte = False
 
-    def push(self, state, action, reward, next_state, done, R_te, prior=None):
+    def push(self, state, action, reward, next_state, done, R_te=None, prior=None):
         state      = np.expand_dims(state, 0)
         next_state = np.expand_dims(next_state, 0)
-        R_te = np.expand_dims(R_te, 0)
+        if R_te is not None:
+            R_te = np.expand_dims(R_te, 0)
+            if not self.store_Rte:
+                self.store_Rte = True
         if prior is not None:
             if not self.store_prior:
                 self.store_prior = True
             prior = np.expand_dims(prior, 0)
+        if R_te is not None and prior is not None:
             self.buffer.append((state, action, reward, next_state, done, R_te, prior))
-        else:
+        elif R_te is None and prior is not None:
+            self.buffer.append((state, action, reward, next_state, done, prior))
+        elif R_te is not None and prior is None:
             self.buffer.append((state, action, reward, next_state, done, R_te))
+        else:
+            self.buffer.append((state, action, reward, next_state, done))
 
     def sample(self, batch_size):
-        if self.store_prior:
+        if self.store_Rte and self.store_prior:
             state, action, reward, next_state, done, R_te, prior = zip(*random.sample(self.buffer, batch_size))
-        else:
+        elif self.store_Rte and not self.store_prior:
             state, action, reward, next_state, done, R_te = zip(*random.sample(self.buffer, batch_size))
+        elif not self.store_Rte and self.store_prior:
+            state, action, reward, next_state, done, prior = zip(*random.sample(self.buffer, batch_size))
+        else:
+            state, action, reward, next_state, done = zip(*random.sample(self.buffer, batch_size))
         state = np.asarray(np.concatenate(state), dtype=np.float32)
         next_state = np.asarray(np.concatenate(next_state), dtype=np.float32)
         action = np.asarray(action, dtype=np.int32)
         reward = np.asarray(reward, dtype=np.float32)
         done = np.asarray(done, dtype=bool)
-        R_te = np.asarray(R_te, dtype=np.float32)
-        if self.store_prior:
+        if self.store_Rte and self.store_prior:
+            R_te = np.asarray(R_te, dtype=np.float32)
             prior = np.asarray(np.concatenate(prior), dtype=np.float32)
             return (state, action, reward, next_state, done, R_te, prior)
-        return (state, action, reward, next_state, done, R_te)
+        elif self.store_Rte and not self.store_prior:
+            R_te = np.asarray(R_te, dtype=np.float32)
+            return (state, action, reward, next_state, done, R_te)
+        elif not self.store_Rte and self.store_prior:
+            prior = np.asarray(np.concatenate(prior), dtype=np.float32)
+            return (state, action, reward, next_state, done, prior)
+        else:
+            return (state, action, reward, next_state, done)
 
     def __len__(self):
         return len(self.buffer)
