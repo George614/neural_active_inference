@@ -181,7 +181,7 @@ def plot_TTC_diff():
     for i in range(len(TTC_diffs_list)):
         fig, ax = plt.subplots(constrained_layout=True)
         ax.plot(TTC_diffs_list[i][:, 0], TTC_diffs_list[i][:, 1], label='TTC_diff', color='blue', marker=".", markersize=3, linewidth=0.5)
-        if len(offsets_list[i]) > 0:
+        if len(offsets_list) > 0 and len(offsets_list[i]) > 0:
             ax.plot(offsets_list[i][:, 0], offsets_list[i][:, 1], label='offset', color='green', marker=".", markersize=3, linewidth=0.5)
         ax.axhline(y=0.0, color = 'red', linestyle = '--', linewidth=0.5)
         ax.set_xlabel("Episodes")

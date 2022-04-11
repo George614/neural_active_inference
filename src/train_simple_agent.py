@@ -211,7 +211,10 @@ for trial in range(start_trial, n_trials):
         episode_reward = 0
         while not done:
             frame_idx += 1
-            epsilon = 0.0
+            if epsilon_greedy:
+                epsilon = epsilon_by_frame(frame_idx)
+            else:
+                epsilon = 0.0
             pplModel.epsilon.assign(epsilon)
 
             obv = tf.convert_to_tensor(observation, dtype=tf.float32)
@@ -253,7 +256,7 @@ for trial in range(start_trial, n_trials):
 
             ## save transition tuple to the replay buffer, then train on batch w/ or w/o schedule ##
             if use_env_prior:
-                replay_buffer.push(observation, action, reward, next_obv, done, obv_prior)
+                replay_buffer.push(observation, action, reward, next_obv, done, prior=obv_prior)
             else:
                 replay_buffer.push(observation, action, reward, next_obv, done)
             
