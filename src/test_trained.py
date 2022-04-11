@@ -4,7 +4,7 @@ Loaded a trained agent and test it under given conditions.
 Options include:
 1. Generating a video of the trajectory for the test episode.
 2. Generating a video of the EFE values for each action throughout the episode.
-3. Combining 2 videos generated previously into a synced gif.
+3. Combining 2 videos generated previously into a synced avi.
 
 @author: Zhizhuo (George) Yang
 """
@@ -23,17 +23,18 @@ from utils import load_object
 sys.path.insert(0, 'model/')
 from interception_py_env import InterceptionEnv
 
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/negRti_posRte_mse_4D_obv_w_speedchg_allSpeeds_PriorError_DQNhyperP_512net_noL2Reg_relu_learnSche_3k/"
+model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_pedal1.0_InstOnly_noHdst_512net_relu_learnSche_3k/"
 env_id = 'interception' #'mcar' or 'interception'
-target_speed_idx = 0
+target_speed_idx = 2
 approach_angle_idx = 3
+perfect_prior = False
 env_prior = 'prior_error' # or prior_obv or None
 create_video = True
 plot_efe = True
 combine_videos = True
 
 if env_id == 'interception':
-    env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior)
+    env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
     print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
 elif env_id == 'mcar':
     import gym
@@ -43,9 +44,15 @@ FPS = 30
 frame_duration = 1 / FPS
 
 trial_num = 0
-episode_num = 2650
+episode_num = 2500
 qaiModel = load_object(model_save_path + "trial_{}_epd_{}.agent".format(trial_num, episode_num))
 print("Loaded QAI model from {}".format(model_save_path))
+print("rho value: ", qaiModel.rho)
+print("use_prior_space: ", qaiModel.use_prior_space)
+print("use_bonus: ", qaiModel.use_bonus)
+print("use_combined_nn: ", qaiModel.use_combined_nn)
+print("model seed: ", qaiModel.seed)
+print("instru_term: ", qaiModel.instru_term)
 qaiModel.epsilon.assign(0.0)
 
 if create_video:
@@ -72,7 +79,7 @@ while not done:
     obv = tf.convert_to_tensor(observation, dtype=tf.float32)
     obv = tf.expand_dims(obv, axis=0)
     if plot_efe:
-        action, efe_values = qaiModel.act(obv, return_efe=True)
+        action, efe_values, isRandom = qaiModel.act(obv, return_efe=True)
         efe_values = efe_values.numpy().squeeze()
         efe_list.append(efe_values)
     else:
@@ -142,15 +149,15 @@ print("Test simulation finished.")
 if combine_videos:
     import subprocess
     cmd_traj = ["ffmpeg", "-i", "trial_{}_epd_{}_tsidx_{}.avi".format(trial_num, episode_num, target_speed_idx), "-vf",
-                "scale=640:-1", "trajectory_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx)]
+                "scale=640:-1", "trajectory_trial_{}_epd_{}_tsidx_{}.mp4".format(trial_num, episode_num, target_speed_idx)]
     cmd_efe = ["ffmpeg", "-i", "EFE_animation_trial_{}_epd_{}_tsidx_{}.avi".format(trial_num, episode_num, target_speed_idx),
-                "-vf", "scale=640:-1", "EFE_animation_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx)]
-    cmd_combine = ["ffmpeg", "-i", "trajectory_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx),
-                    "-i", "EFE_animation_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx),
-                    "-filter_complex", "vstack=inputs=2", "combined_trial_{}_epd_{}_tsidx_{}.gif".format(trial_num, episode_num, target_speed_idx)]
-    print("Creating combined animation gifs...")
+                "-vf", "scale=640:-1", "EFE_animation_trial_{}_epd_{}_tsidx_{}_scaled.mp4".format(trial_num, episode_num, target_speed_idx)]
+    cmd_combine = ["ffmpeg", "-i", "trajectory_trial_{}_epd_{}_tsidx_{}.mp4".format(trial_num, episode_num, target_speed_idx),
+                    "-i", "EFE_animation_trial_{}_epd_{}_tsidx_{}_scaled.mp4".format(trial_num, episode_num, target_speed_idx),
+                    "-filter_complex", "vstack=inputs=2", "combined_trial_{}_epd_{}_tsidx_{}.mp4".format(trial_num, episode_num, target_speed_idx)]
+    print("Creating combined animation avis...")
     os.chdir(model_save_path)
     subprocess.run(cmd_traj)
     subprocess.run(cmd_efe)
     subprocess.run(cmd_combine)
-    print("All gifs are created.")
+    print("All avis are created.")
