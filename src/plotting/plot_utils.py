@@ -14,7 +14,7 @@ from pathlib import Path
 from collections import deque
 import subprocess
 
-out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_InstOnly_hdst3x_512net_relu_learnSche_3k_bonusRW/"
+out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_pedal1.0_InstOnly_noHdst_noTransGrads_512net_relu_learnSche_3k/"
 result_dir = Path(out_dir)
 num_trials = 5
 num_episodes = 3000
@@ -93,7 +93,7 @@ def plot_TTC_trial_progress(out_dir, TTC_list=None):
         plt.close(fig)
 
 
-def plot_TTC_boxplot(out_dir, TTC_list=None):
+def plot_TTC_boxplot(out_dir, TTC_list=None, plot_fname=None):
     if TTC_list is None:
         out_path = Path(out_dir)
         TTC_dir_list = list(out_path.glob("*TTCs.npy"))
@@ -127,7 +127,10 @@ def plot_TTC_boxplot(out_dir, TTC_list=None):
     fig = plt.figure()
     ax = sns.boxplot(x='Initial speed', y='value', data=dd, hue='TTC Type')
     ax.set_ylabel('Time (s)')
-    fig.savefig(out_dir + "TTC_boxplot.png", dpi=200, bbox_inches="tight")
+    if plot_fname is not None:
+        fig.savefig(out_dir + plot_fname + ".png", dpi=200, bbox_inches="tight")
+    else:
+        fig.savefig(out_dir + "TTC_boxplot.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -232,9 +235,9 @@ def plot_rewards():
 
 
 if __name__ == '__main__':
-    plot_hindsight_error()
-    plot_TTC_boxplot()
-    plot_TTC_trial_progress()
+    # plot_hindsight_error()
+    plot_TTC_boxplot(out_dir)
+    plot_TTC_trial_progress(out_dir)
     plot_TTC_diff()
     plot_rewards()
     # plot_all_EFE()

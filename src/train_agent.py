@@ -531,7 +531,6 @@ for trial in range(start_trial, n_trials):
                 if args.getArg("env_name") == "InterceptionEnv":
                     f_speed_idx = np.random.randint(3)
                     env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
-                    env.seed(seed=seed)
                 observation = env.reset()
                 episode_reward = 0
                 done_test = False
