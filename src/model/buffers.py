@@ -42,11 +42,11 @@ class ReplayBuffer(object):
             state, action, reward, next_state, done, prior = zip(*random.sample(self.buffer, batch_size))
         else:
             state, action, reward, next_state, done = zip(*random.sample(self.buffer, batch_size))
-        state = np.asarray(np.concatenate(state), dtype=np.float32)
+        state      = np.asarray(np.concatenate(state), dtype=np.float32)
         next_state = np.asarray(np.concatenate(next_state), dtype=np.float32)
-        action = np.asarray(action, dtype=np.int32)
-        reward = np.asarray(reward, dtype=np.float32)
-        done = np.asarray(done, dtype=bool)
+        action     = np.asarray(action, dtype=np.int32)
+        reward     = np.asarray(reward, dtype=np.float32)
+        done       = np.asarray(done, dtype=bool)
         if self.store_Rte and self.store_prior:
             R_te = np.asarray(R_te, dtype=np.float32)
             prior = np.asarray(np.concatenate(prior), dtype=np.float32)
@@ -135,6 +135,29 @@ class NaivePrioritizedBuffer(object):
     def update_priorities(self, batch_indices, batch_priorities):
         for idx, prio in zip(batch_indices, batch_priorities):
             self.priorities[idx] = prio
+
+    def __len__(self):
+        return len(self.buffer)
+
+
+class HindsightBuffer(object):
+    '''
+    Replay Buffer for storing hindsight error and
+    offset and training the predictive component.
+    '''
+    def __init__(self, capacity, seed=None):
+        self.buffer = deque(maxlen=capacity)
+        random.seed(seed)
+
+    def push(self, init_obv, hindsight_error):
+        init_obv = np.expand_dims(init_obv, 0)
+        self.buffer.append((init_obv, hindsight_error))
+
+    def sample(self, batch_size):
+        init_obv, hindsight_error = zip(*random.sample(self.buffer, batch_size))
+        init_obv = np.asarray(np.concatenate(init_obv), dtype=np.float32)
+        hindsight_error = np.asarray(hindsight_error, dtype=np.float32)
+        return (init_obv, hindsight_error)
 
     def __len__(self):
         return len(self.buffer)

@@ -29,6 +29,7 @@ class QAIModel:
         self.act_fx = args.getArg("act_fx")
         self.efe_act_fx = args.getArg("efe_act_fx")
         self.gamma_d = float(args.getArg("gamma_d"))
+        self.lambda_h_error = float(args.getArg("lambda_h_error"))
         self.use_sum_q = args.getArg("use_sum_q").strip().lower() == 'true'
         self.instru_term = args.getArg("instru_term")
         self.normalize_signals = args.getArg("normalize_signals").strip().lower() == 'true'
@@ -179,9 +180,9 @@ class QAIModel:
             offset = tf.clip_by_value(offset, -12.0, 12.0)
             H_hat = offset * self.alpha + self.beta  # estimated hindsight error given offset in speed_diff
             # offset = tf.clip_by_value(offset, -3.0, 3.0)
-            loss_h_reconst = tf.math.square(H_hat - H_error)
-            loss_h_error = tf.math.square(H_hat)
-            loss_pc = loss_h_reconst + loss_h_error #TODO *lambda_h_error, default==1
+            loss_h_reconst = mse(H_hat, H_error)
+            loss_h_error = mse(H_hat, tf.zeros_like(H_hat))
+            loss_pc = loss_h_reconst + loss_h_error * self.lambda_h_error
         grads_pc = tape.gradient(loss_pc, self.param_var)
 
         return grads_pc, loss_h_reconst, loss_h_error

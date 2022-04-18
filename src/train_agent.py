@@ -15,7 +15,7 @@ from config import Config
 sys.path.insert(0, 'model/')
 from qai_model import QAIModel
 from interception_py_env import InterceptionEnv
-from buffers import ReplayBuffer, NaivePrioritizedBuffer
+from buffers import ReplayBuffer, NaivePrioritizedBuffer, HindsightBuffer
 from scheduler import Linear_schedule, Exponential_schedule
 
 """
@@ -103,9 +103,11 @@ test_episodes = 5  # number of episodes for testing
 target_update_freq = int(args.getArg("target_update_step"))  # in terms of steps
 target_update_ep = int(args.getArg("target_update_ep")) #2  # in terms of episodes
 buffer_size = int(args.getArg("buffer_size")) #200000 # 100000
+h_buffer_size = int(args.getArg("h_buffer_size"))
 learning_start = int(args.getArg("learning_start"))
 prob_alpha = 0.6
 batch_size = int(args.getArg("batch_size")) #256
+h_batch_size = int(args.getArg("h_batch_size"))
 dim_a = int(args.getArg("dim_a"))
 dim_o = int(args.getArg("dim_o"))
 grad_norm_clip = float(args.getArg("grad_norm_clip")) #1.0 #10.0
@@ -157,6 +159,7 @@ beta_by_episode = Linear_schedule(beta_start, beta_final, beta_ep_duration)
 train_freq = int(args.getArg("train_freq"))
 # apply n gradient steps in each training cycle
 gradient_steps = int(args.getArg("gradient_steps"))
+h_gradient_steps = int(args.getArg("h_gradient_steps"))
 
 ### initialize optimizer and environment ###
 opt_type = args.getArg("optimizer").strip().lower()
@@ -214,6 +217,8 @@ for trial in range(start_trial, n_trials):
     else:
         expert_buffer = ReplayBuffer(buffer_size, seed=seed)
         replay_buffer = ReplayBuffer(buffer_size, seed=seed)
+    if hindsight_learn:
+        hindsight_buffer = HindsightBuffer(h_buffer_size, seed=seed)
     if all_data is not None:
         # n_tossed = 0
         for i in range(min(len(all_data), buffer_size)):
@@ -256,6 +261,8 @@ for trial in range(start_trial, n_trials):
         TTC_diff_list = []
         failed_offset_list = []
         offset_list = []
+        alpha_list = []
+        beta_list = []
         f_speed_idx_list = []
         target_front_count = 0
         subject_front_count = 0
@@ -273,7 +280,12 @@ for trial in range(start_trial, n_trials):
         if args.getArg("env_name") == "InterceptionEnv":
             f_speed_idx = np.random.randint(3)
             env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
+            env.seed(69)
         observation = env.reset()
+        # print("target initial speed: ", env.target_init_speed)
+        # print("time_to_change_speed: ", env.time_to_change_speed)
+        # print("target_final_speed: ", env.target_final_speed)
+        # print("==================================")
         init_condition = tf.expand_dims(observation[:2], axis=0)
         if hindsight_learn:  # if use predictive component to learn from hindsight error
             offset = pplModel.infer_offset(init_condition)
@@ -492,16 +504,28 @@ for trial in range(start_trial, n_trials):
 
         if hindsight_learn:
             # learn from hindsight error
-            grads_pc, loss_h_reconst, loss_h_error = pplModel.train_pc(init_condition, env.hindsight_error)
-            grads_pc_clipped = []
-            for grad in grads_pc:
-                if grad is not None:
-                    grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
-                grads_pc_clipped.append(grad)
-            opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
+            hindsight_buffer.push(init_condition.numpy().squeeze(), env.hindsight_error)
+            for _ in range(h_gradient_steps):
+                if len(hindsight_buffer) > h_batch_size:
+                    h_batch_data = hindsight_buffer.sample(h_batch_size)
+                else:
+                    h_batch_data = hindsight_buffer.sample(len(hindsight_buffer))
+                batch_init_obv, batch_hd_error = h_batch_data
+                grads_pc, loss_h_reconst, loss_h_error = pplModel.train_pc(batch_init_obv, batch_hd_error)
+                grads_pc_clipped = []
+                for grad in grads_pc:
+                    if grad is not None:
+                        grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
+                    grads_pc_clipped.append(grad)
+                opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
+            print("frame {0}, L.h_reconst = {1}, L.h_error = {2}".format(frame_idx, loss_h_reconst.numpy(),
+                  loss_h_error.numpy()))
+            print("alpha {}, beta {}".format(pplModel.alpha.numpy(), pplModel.beta.numpy()))
             # record hindsight error
             hindsight_error_list.append(env.hindsight_error)
             offset_list.append(offset)
+            alpha_list.append(pplModel.alpha.numpy())
+            beta_list.append(pplModel.beta.numpy())
         if reward == 0:
             # record who passes the interception point first
             if env.state[0] < env.state[2]:
@@ -595,6 +619,9 @@ for trial in range(start_trial, n_trials):
         np.save("{0}trial_{1}_EFE_values.npy".format(out_dir, trial), EFE_values_trial_list)
         print("==> Saving hindsight error sequence...")
         np.save("{0}trial_{1}_hindsight_errors.npy".format(out_dir, trial), hindsight_error_list)
+        print("==> Saving alpha and bets sequence...")
+        np.save("{0}trial_{1}_alpha.npy".format(out_dir, trial), alpha_list)
+        np.save("{0}trial_{1}_beta.npy".format(out_dir, trial), beta_list)
         print("==> Saving TTC_diff sequence...")
         np.save("{0}trial_{1}_TTC_diffs.npy".format(out_dir, trial), np.asarray(TTC_diff_list))
         print("==> Saving offset sequence...")
