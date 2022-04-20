@@ -14,7 +14,7 @@ from pathlib import Path
 from collections import deque
 import subprocess
 
-out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_pedal1.0_InstOnly_noHdst_noTransGrads_512net_relu_learnSche_3k/"
+out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune2/"
 result_dir = Path(out_dir)
 num_trials = 5
 num_episodes = 3000
@@ -165,6 +165,44 @@ def plot_hindsight_error():
         plt.close(fig)
 
 
+def plot_alpha_beta():
+    alpha_dir_list = list(result_dir.glob("*alpha.npy"))
+    beta_dir_list = list(result_dir.glob("*beta.npy"))
+    alpha_list = []
+    beta_list = []
+    for alpha_dir in alpha_dir_list:
+        alpha_trial = np.load(str(alpha_dir), allow_pickle=True)
+        alpha_list.append(alpha_trial)
+    for beta_dir in beta_dir_list:
+        beta_trial = np.load(str(beta_dir), allow_pickle=True)
+        beta_list.append(beta_trial)
+    for i in range(len(alpha_list)):
+        fig, ax = plt.subplots(constrained_layout=True)
+        ax.plot(np.arange(len(alpha_list[0])), alpha_list[i][:], marker=".", label="alpha", color="red", markersize=0.5, linewidth=0.5)
+        ax.plot(np.arange(len(beta_list[0])), beta_list[i][:], marker=".", label="beta", color="blue", markersize=0.5, linewidth=0.5)
+        ax.set_xlabel("Episodes")
+        ax.set_title("alpha and beta throughout a trial")
+        ax.legend(loc='upper right', fontsize='x-small')
+        fig.savefig(out_dir + "trial_{}_alpha_beta.png".format(i), dpi=200, bbox_inches="tight")
+        plt.close(fig)
+    alpha_np = np.asarray(alpha_list)
+    beta_np = np.asarray(beta_list)
+    fig, ax = plt.subplots()
+    mean_alpha = np.mean(alpha_np, axis=0)
+    std_alpha = np.std(alpha_np, axis=0)
+    mean_beta = np.mean(beta_np, axis=0)
+    std_beta = np.std(beta_np, axis=0)
+    ax.plot(np.arange(len(mean_alpha)), mean_alpha, alpha=1.0, color='red', label='mean_alpha', linewidth=0.5)
+    ax.fill_between(np.arange(len(mean_alpha)), mean_alpha - std_alpha, mean_alpha + std_alpha, color='pink', alpha=0.25)
+    ax.plot(np.arange(len(mean_beta)), mean_beta, alpha=1.0, color='blue', label='mean_beta', linewidth=0.5)
+    ax.fill_between(np.arange(len(mean_beta)), mean_beta - std_beta, mean_beta + std_beta, color='cyan', alpha=0.25)
+    ax.legend(bbox_to_anchor=(0., 1.1, 1., .2), loc='lower left', fontsize='small', ncol=2, mode='expand', borderaxespad=0.)
+    ax.set_xlabel("Number of episodes")
+    ax.set_title("Averaged alpha and beta")
+    fig.savefig(out_dir + "mean_alpha_beta.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
 def plot_TTC_diff():
     TTC_diffs_dir_list = list(result_dir.glob("*TTC_diffs.npy"))
     TTC_diffs_list = []
@@ -235,7 +273,8 @@ def plot_rewards():
 
 
 if __name__ == '__main__':
-    # plot_hindsight_error()
+    plot_hindsight_error()
+    plot_alpha_beta()
     plot_TTC_boxplot(out_dir)
     plot_TTC_trial_progress(out_dir)
     plot_TTC_diff()
