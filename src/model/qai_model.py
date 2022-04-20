@@ -172,7 +172,9 @@ class QAIModel:
 
     def infer_offset(self, init_obv):
         offset, _, _ = self.offset_model.predict(init_obv)
-        return offset
+        offset = tf.clip_by_value(offset, -12.0, 12.0)
+        H_hat = offset * self.alpha + self.beta
+        return offset, H_hat
 
     def train_pc(self, init_obv, H_error):
         with tf.GradientTape() as tape:

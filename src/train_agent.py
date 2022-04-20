@@ -261,6 +261,7 @@ for trial in range(start_trial, n_trials):
         TTC_diff_list = []
         failed_offset_list = []
         offset_list = []
+        hdst_hat_list = []
         alpha_list = []
         beta_list = []
         f_speed_idx_list = []
@@ -288,8 +289,9 @@ for trial in range(start_trial, n_trials):
         # print("==================================")
         init_condition = tf.expand_dims(observation[:2], axis=0)
         if hindsight_learn:  # if use predictive component to learn from hindsight error
-            offset = pplModel.infer_offset(init_condition)
+            offset, Hdst_hat = pplModel.infer_offset(init_condition)
             offset = offset.numpy().squeeze()
+            Hdst_hat = Hdst_hat.numpy().squeeze()
         if action_delay:
             action_buffer = deque()
             obv_buffer = deque()
@@ -524,6 +526,7 @@ for trial in range(start_trial, n_trials):
             # record hindsight error
             hindsight_error_list.append(env.hindsight_error)
             offset_list.append(offset)
+            hdst_hat_list.append(Hdst_hat)
             alpha_list.append(pplModel.alpha.numpy())
             beta_list.append(pplModel.beta.numpy())
         if reward == 0:
@@ -619,6 +622,7 @@ for trial in range(start_trial, n_trials):
         np.save("{0}trial_{1}_EFE_values.npy".format(out_dir, trial), EFE_values_trial_list)
         print("==> Saving hindsight error sequence...")
         np.save("{0}trial_{1}_hindsight_errors.npy".format(out_dir, trial), hindsight_error_list)
+        np.save("{0}trial_{1}_hindsight_hat.npy".format(out_dir, trial), hdst_hat_list)
         print("==> Saving alpha and bets sequence...")
         np.save("{0}trial_{1}_alpha.npy".format(out_dir, trial), alpha_list)
         np.save("{0}trial_{1}_beta.npy".format(out_dir, trial), beta_list)
