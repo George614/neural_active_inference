@@ -14,7 +14,7 @@ from pathlib import Path
 from collections import deque
 import subprocess
 
-out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune2/"
+out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_InstEpst_HdstBuffer_discount0_noHhatLoss_relu_learnSche_3k/"
 result_dir = Path(out_dir)
 num_trials = 5
 num_episodes = 3000
@@ -148,21 +148,49 @@ def plot_all_EFE():
 
 def plot_hindsight_error():
     hindsight_dir_list = list(result_dir.glob("*hindsight_errors.npy"))
+    hindsight_hat_dir_list = list(result_dir.glob("*hindsight_hat.npy"))
     hindsight_list = []
+    hindsight_hat_list = []
     for hindsights in hindsight_dir_list:
         hindsight_trial = np.load(str(hindsights), allow_pickle=True)
         hindsight_list.append(hindsight_trial)
-
+    for h_hat_dir in hindsight_hat_dir_list:
+        h_hat_trial = np.load(str(h_hat_dir), allow_pickle=True)
+        hindsight_hat_list.append(h_hat_trial)
     for i in range(len(hindsight_list)):
         fig, ax = plt.subplots(constrained_layout=True)
         # ax.plot(np.arange(0, num_episodes, 25), hindsight_list[i][:], marker="*")
-        ax.plot(np.arange(0, num_episodes), hindsight_list[i][:], marker=".", markersize=3, linewidth=0.5)
+        ax.plot(np.arange(len(hindsight_list[0])), hindsight_list[i][:], marker=".", label="H", color="blue", markersize=0.5, linewidth=0.5)
+        ax.plot(np.arange(len(hindsight_list[0])), hindsight_hat_list[i][:], marker=".", label="H_hat", color="green", markersize=0.5, linewidth=0.5)
         ax.axhline(y=0.0, color = 'red', linestyle = '--', linewidth=0.5)
         ax.set_xlabel("Episodes")
         ax.set_ylabel("Time in seconds")
         ax.set_title("Hindsight errors throughout a trial")
+        ax.legend(loc='upper right', fontsize='x-small')
         fig.savefig(out_dir + "trial_{}_hindsight_errors.png".format(i), dpi=200, bbox_inches="tight")
         plt.close(fig)
+
+
+def plot_grouped_hdst(out_dir, hdst_list=None, plot_fname=None):
+    if hdst_list is None:
+        out_path = Path(out_dir)
+        hindsight_dir_list = list(out_path.glob("*hdst_n_speedIdx.npy"))
+        hdst_list = []
+        for hindsights in hindsight_dir_list:
+            hindsight_trial = np.load(str(hindsights), allow_pickle=True)
+            hdst_list.append(hindsight_trial)
+    hdst_np = np.concatenate(hdst_list, axis=1)
+    hdst_np = np.swapaxes(hdst_np, 0, 1)
+    df = pd.DataFrame(hdst_np, columns=["Initial speed", "Hindsight"])
+    fig = plt.figure()
+    ax = sns.boxplot(x="Initial speed", y="Hindsight", data=df)
+    ax.set_ylabel('Time (s)')
+    ax.set_xticklabels(["11.25", "9.47", "8.18"])
+    if plot_fname is not None:
+        fig.savefig(out_dir + plot_fname + ".png", dpi=200, bbox_inches="tight")
+    else:
+        fig.savefig(out_dir + "Hindsight_boxplot.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
 
 
 def plot_alpha_beta():
@@ -196,7 +224,7 @@ def plot_alpha_beta():
     ax.fill_between(np.arange(len(mean_alpha)), mean_alpha - std_alpha, mean_alpha + std_alpha, color='pink', alpha=0.25)
     ax.plot(np.arange(len(mean_beta)), mean_beta, alpha=1.0, color='blue', label='mean_beta', linewidth=0.5)
     ax.fill_between(np.arange(len(mean_beta)), mean_beta - std_beta, mean_beta + std_beta, color='cyan', alpha=0.25)
-    ax.legend(bbox_to_anchor=(0., 1.1, 1., .2), loc='lower left', fontsize='small', ncol=2, mode='expand', borderaxespad=0.)
+    ax.legend(loc='upper right', fontsize='x-small')
     ax.set_xlabel("Number of episodes")
     ax.set_title("Averaged alpha and beta")
     fig.savefig(out_dir + "mean_alpha_beta.png", dpi=200, bbox_inches="tight")
