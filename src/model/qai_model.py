@@ -79,7 +79,7 @@ class QAIModel:
         obv_head_dims.append(self.dim_o)
 
         ## offset model dims ##
-        offsetM_dims = [2, 64, 1]
+        offsetM_dims = [4, 64, 1]
 
         act_fun = self.act_fx #"relu"
         efe_act_fun = self.efe_act_fx #"relu6"

@@ -261,6 +261,7 @@ for trial in range(start_trial, n_trials):
         TTC_diff_list = []
         failed_offset_list = []
         offset_list = []
+        H_TTC_diff_list = []
         hdst_hat_list = []
         alpha_list = []
         beta_list = []
@@ -286,11 +287,7 @@ for trial in range(start_trial, n_trials):
         # print("time_to_change_speed: ", env.time_to_change_speed)
         # print("target_final_speed: ", env.target_final_speed)
         # print("==================================")
-        init_condition = tf.expand_dims(observation[:2], axis=0)
-        if hindsight_learn:  # if use predictive component to learn from hindsight error
-            offset, Hdst_hat = pplModel.infer_offset(init_condition)
-            offset = offset.numpy().squeeze()
-            Hdst_hat = Hdst_hat.numpy().squeeze()
+        # init_condition = tf.expand_dims(observation[:2], axis=0)
         if action_delay:
             action_buffer = deque()
             obv_buffer = deque()
@@ -300,6 +297,9 @@ for trial in range(start_trial, n_trials):
         if record_stats and ep_idx % record_interval == 0:
             TTC_calculated = False
             efe_list = []
+            offset_dynamic_list = []
+            H_dynamic_list = []
+            H_hat_dynamic_list = []
             if record_video:
                 video = cv2.VideoWriter(out_dir+"trial_{}_epd_{}_tsidx_{}.avi".format(trial, ep_idx, f_speed_idx), fourcc, float(FPS), (width, height))
         # linear schedule for VAE model regularization
@@ -330,6 +330,12 @@ for trial in range(start_trial, n_trials):
             else:
                 action = pplModel.act(obv)
             action = action.numpy().squeeze()
+
+            ## if use predictive component to learn from hindsight error ##
+            if hindsight_learn:
+                offset, Hdst_hat = pplModel.infer_offset(obv) # per-step offset
+                offset = offset.numpy().squeeze()
+                Hdst_hat = Hdst_hat.numpy().squeeze()
 
             ## take a step in the environment ## 
             if action_delay:
@@ -363,6 +369,22 @@ for trial in range(start_trial, n_trials):
             R_te = pplModel.infer_epistemic(obv, obv_tp1, action=a_t)
             R_te = R_te.numpy().squeeze()
 
+            ## train the predictive component ##
+            if hindsight_learn and env.time >= 10.0 / env.FPS:
+                H_TTC_diff = env.state[2] / env.state[3] - env.state[0] / env.state[1]
+                hindsight_buffer.push(observation, H_TTC_diff)
+                if len(hindsight_buffer) > h_batch_size and frame_idx % train_freq == 0:
+                    for _ in range(h_gradient_steps):
+                        h_batch_data = hindsight_buffer.sample(h_batch_size)
+                        [batch_init_obv, batch_hd_error] = h_batch_data
+                        grads_pc, loss_h_reconst, loss_h_error = pplModel.train_pc(batch_init_obv, batch_hd_error)
+                        grads_pc_clipped = []
+                        for grad in grads_pc:
+                            if grad is not None:
+                                grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
+                            grads_pc_clipped.append(grad)
+                        opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
+
             if record_stats and ep_idx % record_interval == 0:
                 # calculate and record TTC and write 1 frame to the video
                 speed_phase = info['speed_phase']
@@ -379,6 +401,10 @@ for trial in range(start_trial, n_trials):
                     img = env.render(mode='rgb_array', offset=offset, isRandom=isRandom)
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     video.write(img)
+                if hindsight_learn and env.time >= 10.0 / env.FPS:
+                    offset_dynamic_list.append(offset)
+                    H_dynamic_list.append(H_TTC_diff)
+                    H_hat_dynamic_list.append(Hdst_hat)
             
             episode_reward += reward
 
@@ -505,27 +531,14 @@ for trial in range(start_trial, n_trials):
 
         if hindsight_learn:
             # learn from hindsight error
-            hindsight_buffer.push(init_condition.numpy().squeeze(), env.hindsight_error)
-            for _ in range(h_gradient_steps):
-                if len(hindsight_buffer) > h_batch_size:
-                    h_batch_data = hindsight_buffer.sample(h_batch_size)
-                else:
-                    h_batch_data = hindsight_buffer.sample(len(hindsight_buffer))
-                batch_init_obv, batch_hd_error = h_batch_data
-                grads_pc, loss_h_reconst, loss_h_error = pplModel.train_pc(batch_init_obv, batch_hd_error)
-                grads_pc_clipped = []
-                for grad in grads_pc:
-                    if grad is not None:
-                        grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
-                    grads_pc_clipped.append(grad)
-                opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
             print("frame {0}, L.h_reconst = {1}, L.h_error = {2}".format(frame_idx, loss_h_reconst.numpy(),
                   loss_h_error.numpy()))
             print("alpha {}, beta {}".format(pplModel.alpha.numpy(), pplModel.beta.numpy()))
             # record hindsight error
             hindsight_error_list.append(env.hindsight_error)
-            offset_list.append(offset)
-            hdst_hat_list.append(Hdst_hat)
+            offset_list.append(np.asarray(offset_dynamic_list))
+            H_TTC_diff_list.append(np.asarray(H_dynamic_list))
+            hdst_hat_list.append(np.asarray(H_hat_dynamic_list))
             alpha_list.append(pplModel.alpha.numpy())
             beta_list.append(pplModel.beta.numpy())
         if reward == 0:
@@ -621,7 +634,8 @@ for trial in range(start_trial, n_trials):
         np.save("{0}trial_{1}_EFE_values.npy".format(out_dir, trial), EFE_values_trial_list)
         print("==> Saving hindsight error sequence...")
         np.save("{0}trial_{1}_hindsight_errors.npy".format(out_dir, trial), hindsight_error_list)
-        np.save("{0}trial_{1}_hindsight_hat.npy".format(out_dir, trial), hdst_hat_list)
+        np.save("{0}trial_{1}_H_dynamic.npy".format(out_dir, trial), H_TTC_diff_list)
+        np.save("{0}trial_{1}_H_hat_dynamic.npy".format(out_dir, trial), hdst_hat_list)
         print("==> Saving alpha and bets sequence...")
         np.save("{0}trial_{1}_alpha.npy".format(out_dir, trial), alpha_list)
         np.save("{0}trial_{1}_beta.npy".format(out_dir, trial), beta_list)
