@@ -79,11 +79,11 @@ while not done:
     obv = tf.convert_to_tensor(observation, dtype=tf.float32)
     obv = tf.expand_dims(obv, axis=0)
     if plot_efe:
-        action, efe_values, isRandom = qaiModel.act(obv, return_efe=True)
+        action, efe_values, isRandom = qaiModel.act(obv)
         efe_values = efe_values.numpy().squeeze()
         efe_list.append(efe_values)
     else:
-        action = qaiModel.act(obv)
+        action, _, _ = qaiModel.act(obv)
     action = action.numpy().squeeze()
     if env_prior is not None:
         next_obv, reward, done, prior, _ = env.step(action)

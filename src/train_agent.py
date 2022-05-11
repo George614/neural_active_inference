@@ -324,11 +324,11 @@ for trial in range(start_trial, n_trials):
 
             ## infer action given current observation ##
             if record_stats and ep_idx % record_interval == 0:
-                action, efe_values, isRandom = pplModel.act(obv, return_efe=True)
+                action, efe_values, isRandom = pplModel.act(obv)
                 efe_values = efe_values.numpy().squeeze()
                 efe_list.append(efe_values)
             else:
-                action = pplModel.act(obv)
+                action, _, _ = pplModel.act(obv)
             action = action.numpy().squeeze()
 
             ## if use predictive component to learn from hindsight error ##
@@ -576,7 +576,7 @@ for trial in range(start_trial, n_trials):
                 while not done_test:
                     obv = tf.convert_to_tensor(observation, dtype=tf.float32)
                     obv = tf.expand_dims(obv, axis=0)
-                    action = pplModel.act(obv)
+                    action, _, _ = pplModel.act(obv)
                     action = action.numpy().squeeze()
                     observation, reward, done_test, _ = env.step(action)
                     episode_reward += reward

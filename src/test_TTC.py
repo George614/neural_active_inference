@@ -19,24 +19,21 @@ from utils import load_object
 sys.path.insert(0, 'model/')
 from interception_py_env import InterceptionEnv
 sys.path.insert(0, 'plotting/')
-from plot_utils import plot_TTC_boxplot
+from plot_utils import plot_TTC_boxplot, plot_grouped_hdst
 from pathlib import Path
 
-folder_names = ["recogNN_noDelay_InstEpst0.25_hdst3x_512net_relu_learnSche_3k_bonusRW",
-                "recogNN_noDelay_InstEpst0.25_Nohdst_512net_relu_learnSche_3k_bonusRW",
-                "recogNN_noDelay_InstOnly_hdst3x_512net_relu_learnSche_3k_bonusRW",
-                "DQN_noDelay_RW_2x512net_relu_learnSche_3k",
-                "recogNN_noDelay_pedal0.6_InstEpst0.25_hdst3x_512net_relu_learnSche_3k_bonusRW",
-                "recogNN_noDelay_pedal0.6_InstOnly_hdst3x_512net_relu_learnSche_3k_bonusRW",
-                "recogNN_noDelay_pedal0.6_InstEpst0.25_noHdst_512net_relu_learnSche_3k_bonusRW",
-                "recogNN_noDelay_pedal0.5_InstEpst0.25_noHdst_512net_relu_learnSche_3k_bonusRW",
-                "recogNN_noDelay_pedal0.5_InstOnly_hdst3x_512net_relu_learnSche_3k_bonusRW",
-                "recogNN_noDelay_pedal0.5_InstEpst0.25_hdst3x_512net_relu_learnSche_3k_bonusRW",
-                "recogNN_noDelay_InstOnly_noHdst_pedal0.6_relu_learnSche_3k",
-                "recogNN_noDelay_InstEpst0.25_Outside_Hdst_pedal0.6_relu_learnSche_3k",
-                "recogNN_noDelay_pedal1.0_InstOnly_noHdst_512net_relu_learnSche_3k",
-                "recogNN_noDelay_pedal1.0_InstOnly_noHdst_noTransGrads_512net_relu_learnSche_3k"]
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/" + folder_names[12] + "/"
+folder_names = ["recogNN_noDelay_sameFSpeedEnv_InstEpst_HdstBuffer_discount0_relu_learnSche_3k",
+                "recogNN_noDelay_sameFSpeedEnv_InstEpst0.25_Hdst10x_discount0_relu_learnSche_3k",
+                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune0",
+                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune1",
+                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune2",
+                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune3",
+                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_record_relu_learnSche_3k",
+                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_noHhatLoss_relu_learnSche_3k",
+                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0.99_relu_learnSche_3k_tune2",
+                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0.99_pedal0.5_relu_learnSche_3k_tune2",
+                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0_relu_learnSche_3k_tune2"]
+model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/" + folder_names[10] + "/"
 test_episodes = 30
 env_prior = 'prior_error' # or prior_obv or None
 perfect_prior = False
@@ -48,9 +45,10 @@ final_model_path = Path(model_save_path + "final_agents/")
 agent_list = list(final_model_path.glob("*.agent"))
 # model_every500_path = Path(model_save_path)
 # agent_list = list(model_every500_path.glob("*_500.agent"))
-agent_name = "_final_agent"
+agent_name = "InstEpst_DynamicHdstBuffer_gamma0.0_final_agent"
 reward_list = []
 TTC_list = []
+hdst_list = []
 target_front_count = 0
 subject_front_count = 0
 
@@ -64,6 +62,7 @@ for trial_agent in agent_list:
     agent_TTC_list = []
     f_speed_idx_list = []
     TTC_diff_list = []
+    hdst_trial_list = []
 
     for _ in range(test_episodes):
         f_speed_idx = np.random.randint(3)
@@ -75,7 +74,7 @@ for trial_agent in agent_list:
         while not done:
             obv = tf.convert_to_tensor(observation, dtype=tf.float32)
             obv = tf.expand_dims(obv, axis=0)
-            action = qaiModel.act(obv)
+            action, _, _ = qaiModel.act(obv)
             action = action.numpy().squeeze()
             next_obv, reward, done, obv_prior, info = env.step(action)
             episode_reward += reward
@@ -92,6 +91,8 @@ for trial_agent in agent_list:
                 f_speed_idx_list.append(f_speed_idx)
             observation = next_obv
         
+        if TTC_calculated:
+            hdst_trial_list.append(env.hindsight_error)
         reward_list.append(episode_reward)
         if episode_reward == 0:
             # record who passes the interception point first
@@ -105,6 +106,8 @@ for trial_agent in agent_list:
 
     trial_agent_TTCs = np.vstack((target_1st_order_TTC_list, target_actual_mean_TTC_list, agent_TTC_list, f_speed_idx_list))
     TTC_list.append(trial_agent_TTCs)
+    trial_hdst = np.vstack((f_speed_idx_list, hdst_trial_list))
+    hdst_list.append(trial_hdst)
 
 total_fail_cases = target_front_count + subject_front_count
 if total_fail_cases != 0:
@@ -112,10 +115,12 @@ if total_fail_cases != 0:
     print("subject_passes_first: {:.2f}%".format(100 * subject_front_count/total_fail_cases))
 mean_reward = np.mean(reward_list)
 print("mean rewards: {:.2f}".format(mean_reward))
-with open("{}test_stats{}.txt".format(model_save_path, agent_name), 'w+') as f:
-    f.write("target_passes_first: {:.2f}%\n".format(100 * target_front_count/total_fail_cases))
-    f.write("subject_passes_first: {:.2f}%\n".format(100 * subject_front_count/total_fail_cases))
+with open("{}test_stats_{}.txt".format(model_save_path, agent_name), 'w+') as f:
+    if total_fail_cases != 0:
+        f.write("target_passes_first: {:.2f}%\n".format(100 * target_front_count/total_fail_cases))
+        f.write("subject_passes_first: {:.2f}%\n".format(100 * subject_front_count/total_fail_cases))
     f.write("mean rewards: {:.2f}\n".format(mean_reward))
 print("plotting TTC boxplot...")
-plot_TTC_boxplot(model_save_path, TTC_list, plot_fname="TTC_boxplot_InstOnly_noHdst_noBonus_pedal1.0" + agent_name)
+plot_TTC_boxplot(model_save_path, TTC_list, plot_fname="TTC_boxplot_" + agent_name)
+plot_grouped_hdst(model_save_path, hdst_list, plot_fname="Hdst_boxplot_" + agent_name)
 print("all done.")
