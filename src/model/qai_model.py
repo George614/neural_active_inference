@@ -29,7 +29,7 @@ class QAIModel:
         self.act_fx = args.getArg("act_fx")
         self.efe_act_fx = args.getArg("efe_act_fx")
         self.gamma_d = float(args.getArg("gamma_d"))
-        self.lambda_h_error = float(args.getArg("lambda_h_error"))
+        self.lambda_h_error = 1.0  # float(args.getArg("lambda_h_error"))
         self.use_sum_q = args.getArg("use_sum_q").strip().lower() == 'true'
         self.instru_term = args.getArg("instru_term")
         self.normalize_signals = args.getArg("normalize_signals").strip().lower() == 'true'
