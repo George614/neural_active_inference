@@ -12,6 +12,8 @@ import sys
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 import tensorflow as tf
+gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(gpu_devices[0], True)
 import numpy as np
 import time
 sys.path.insert(0, 'utils/')
@@ -22,18 +24,11 @@ sys.path.insert(0, 'plotting/')
 from plot_utils import plot_TTC_boxplot, plot_grouped_hdst
 from pathlib import Path
 
-folder_names = ["recogNN_noDelay_sameFSpeedEnv_InstEpst_HdstBuffer_discount0_relu_learnSche_3k",
-                "recogNN_noDelay_sameFSpeedEnv_InstEpst0.25_Hdst10x_discount0_relu_learnSche_3k",
-                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune0",
-                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune1",
-                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune2",
-                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_relu_learnSche_3k_tune3",
-                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_record_relu_learnSche_3k",
-                "recogNN_noDelay_InstEpst_HdstBuffer_discount0_noHhatLoss_relu_learnSche_3k",
-                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0.99_relu_learnSche_3k_tune2",
-                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0.99_pedal0.5_relu_learnSche_3k_tune2",
-                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0_relu_learnSche_3k_tune2"]
-model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/" + folder_names[10] + "/"
+folder_names = ["recogNN_firstOrderPriorEnv_noDelay_InstEpst0.25_discount0_relu_learnSche_3k",
+                "recogNN_noDelay_InstEpst_discount0.0_pedal0.5_relu_learnSche_3k",
+                "recogNN_noDelay_InstEpst_discount0.99_pedal1.0_relu_learnSche_3k",
+                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0.99_pedal0.5_relu_learnSche_3k_tune2"]
+model_save_path = "D:/Projects/neural_active_inference/exp/interception/qai/" + folder_names[1] + "/"
 test_episodes = 30
 env_prior = 'prior_error' # or prior_obv or None
 perfect_prior = False
@@ -45,7 +40,7 @@ final_model_path = Path(model_save_path + "final_agents/")
 agent_list = list(final_model_path.glob("*.agent"))
 # model_every500_path = Path(model_save_path)
 # agent_list = list(model_every500_path.glob("*_500.agent"))
-agent_name = "InstEpst_DynamicHdstBuffer_gamma0.0_final_agent"
+agent_name = "recogNN_InstEpst_gamma0.0_pedal0.5_final_agent"
 reward_list = []
 TTC_list = []
 hdst_list = []
@@ -91,8 +86,17 @@ for trial_agent in agent_list:
                 f_speed_idx_list.append(f_speed_idx)
             observation = next_obv
         
-        if TTC_calculated:
-            hdst_trial_list.append(env.hindsight_error)
+        if not TTC_calculated:  # if the agent goes too fast
+            target_1st_order_TTC = env.state[0] / env.state[1]
+            target_actual_mean_TTC = info['target_TTC']
+            agent_TTC = env.state[2] / env.state[3]
+            TTC_calculated = True
+            target_1st_order_TTC_list.append(target_1st_order_TTC)
+            target_actual_mean_TTC_list.append(target_actual_mean_TTC)
+            agent_TTC_list.append(agent_TTC)
+            f_speed_idx_list.append(f_speed_idx)
+        # if TTC_calculated:
+        hdst_trial_list.append(env.hindsight_error)
         reward_list.append(episode_reward)
         if episode_reward == 0:
             # record who passes the interception point first
@@ -123,4 +127,6 @@ with open("{}test_stats_{}.txt".format(model_save_path, agent_name), 'w+') as f:
 print("plotting TTC boxplot...")
 plot_TTC_boxplot(model_save_path, TTC_list, plot_fname="TTC_boxplot_" + agent_name)
 plot_grouped_hdst(model_save_path, hdst_list, plot_fname="Hdst_boxplot_" + agent_name)
+np.save(model_save_path + agent_name + "_TTC_list.npy", TTC_list)
+np.save(model_save_path + agent_name + "_hdst_list.npy", hdst_list)
 print("all done.")
