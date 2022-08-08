@@ -508,7 +508,7 @@ class InterceptionEnv(gym.Env):
             "TTC difference: {}".format(TTC_diff if TTC_diff is not None else 'None'))
         if isRandom is not None:
             self.isRandom_label.set_text("Random action: {}".format('True' if isRandom else 'False'))
-        if self.hindsight_error is not None:
+        if offset is not None:
             self.hindsight_label.set_text('Hindsight error: %.2f' % self.hindsight_error)
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')

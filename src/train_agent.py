@@ -15,7 +15,7 @@ from config import Config
 sys.path.insert(0, 'model/')
 from qai_model import QAIModel
 from interception_py_env import InterceptionEnv
-from buffers import ReplayBuffer, NaivePrioritizedBuffer
+from buffers import ReplayBuffer, NaivePrioritizedBuffer, HindsightBuffer
 from scheduler import Linear_schedule, Exponential_schedule
 
 """
@@ -103,9 +103,11 @@ test_episodes = 5  # number of episodes for testing
 target_update_freq = int(args.getArg("target_update_step"))  # in terms of steps
 target_update_ep = int(args.getArg("target_update_ep")) #2  # in terms of episodes
 buffer_size = int(args.getArg("buffer_size")) #200000 # 100000
+h_buffer_size = int(args.getArg("h_buffer_size"))
 learning_start = int(args.getArg("learning_start"))
 prob_alpha = 0.6
 batch_size = int(args.getArg("batch_size")) #256
+h_batch_size = int(args.getArg("h_batch_size"))
 dim_a = int(args.getArg("dim_a"))
 dim_o = int(args.getArg("dim_o"))
 grad_norm_clip = float(args.getArg("grad_norm_clip")) #1.0 #10.0
@@ -157,6 +159,7 @@ beta_by_episode = Linear_schedule(beta_start, beta_final, beta_ep_duration)
 train_freq = int(args.getArg("train_freq"))
 # apply n gradient steps in each training cycle
 gradient_steps = int(args.getArg("gradient_steps"))
+h_gradient_steps = int(args.getArg("h_gradient_steps"))
 
 ### initialize optimizer and environment ###
 opt_type = args.getArg("optimizer").strip().lower()
@@ -214,6 +217,8 @@ for trial in range(start_trial, n_trials):
     else:
         expert_buffer = ReplayBuffer(buffer_size, seed=seed)
         replay_buffer = ReplayBuffer(buffer_size, seed=seed)
+    if hindsight_learn:
+        hindsight_buffer = HindsightBuffer(h_buffer_size, seed=seed)
     if all_data is not None:
         # n_tossed = 0
         for i in range(min(len(all_data), buffer_size)):
@@ -256,6 +261,10 @@ for trial in range(start_trial, n_trials):
         TTC_diff_list = []
         failed_offset_list = []
         offset_list = []
+        H_TTC_diff_list = []
+        hdst_hat_list = []
+        alpha_list = []
+        beta_list = []
         f_speed_idx_list = []
         target_front_count = 0
         subject_front_count = 0
@@ -274,10 +283,11 @@ for trial in range(start_trial, n_trials):
             f_speed_idx = np.random.randint(3)
             env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
         observation = env.reset()
-        init_condition = tf.expand_dims(observation[:2], axis=0)
-        if hindsight_learn:  # if use predictive component to learn from hindsight error
-            offset = pplModel.infer_offset(init_condition)
-            offset = offset.numpy().squeeze()
+        # print("target initial speed: ", env.target_init_speed)
+        # print("time_to_change_speed: ", env.time_to_change_speed)
+        # print("target_final_speed: ", env.target_final_speed)
+        # print("==================================")
+        # init_condition = tf.expand_dims(observation[:2], axis=0)
         if action_delay:
             action_buffer = deque()
             obv_buffer = deque()
@@ -287,6 +297,9 @@ for trial in range(start_trial, n_trials):
         if record_stats and ep_idx % record_interval == 0:
             TTC_calculated = False
             efe_list = []
+            offset_dynamic_list = []
+            H_dynamic_list = []
+            H_hat_dynamic_list = []
             if record_video:
                 video = cv2.VideoWriter(out_dir+"trial_{}_epd_{}_tsidx_{}.avi".format(trial, ep_idx, f_speed_idx), fourcc, float(FPS), (width, height))
         # linear schedule for VAE model regularization
@@ -309,14 +322,22 @@ for trial in range(start_trial, n_trials):
             obv = tf.convert_to_tensor(observation, dtype=tf.float32)
             obv = tf.expand_dims(obv, axis=0)
 
+            ## infer action given current observation ##
             if record_stats and ep_idx % record_interval == 0:
-                action, efe_values, isRandom = pplModel.act(obv, return_efe=True)
+                action, efe_values, isRandom = pplModel.act(obv)
                 efe_values = efe_values.numpy().squeeze()
                 efe_list.append(efe_values)
             else:
-                action = pplModel.act(obv)
+                action, _, _ = pplModel.act(obv)
             action = action.numpy().squeeze()
 
+            ## if use predictive component to learn from hindsight error ##
+            if hindsight_learn:
+                offset, Hdst_hat = pplModel.infer_offset(obv) # per-step offset
+                offset = offset.numpy().squeeze()
+                Hdst_hat = Hdst_hat.numpy().squeeze()
+
+            ## take a step in the environment ## 
             if action_delay:
                 if ep_frame_idx <= delay_frames:
                     action_buffer.append(action)
@@ -340,6 +361,30 @@ for trial in range(start_trial, n_trials):
                 else:
                     next_obv, reward, done, info = env.step(action)
 
+            ## infer epistemic signal using generative model ##
+            obv_tp1 = tf.convert_to_tensor(next_obv, dtype=tf.float32)
+            obv_tp1 = tf.expand_dims(obv_tp1, axis=0)
+            a_t = tf.expand_dims(action, axis=0)
+            a_t = tf.one_hot(a_t, depth=dim_a)
+            R_te = pplModel.infer_epistemic(obv, obv_tp1, action=a_t)
+            R_te = R_te.numpy().squeeze()
+
+            ## train the predictive component ##
+            if hindsight_learn and env.time >= 10.0 / env.FPS:
+                H_TTC_diff = env.state[2] / env.state[3] - env.state[0] / env.state[1]
+                hindsight_buffer.push(observation, H_TTC_diff)
+                if len(hindsight_buffer) > h_batch_size and frame_idx % train_freq == 0:
+                    for _ in range(h_gradient_steps):
+                        h_batch_data = hindsight_buffer.sample(h_batch_size)
+                        [batch_init_obv, batch_hd_error] = h_batch_data
+                        grads_pc, loss_h_reconst, loss_h_error = pplModel.train_pc(batch_init_obv, batch_hd_error)
+                        grads_pc_clipped = []
+                        for grad in grads_pc:
+                            if grad is not None:
+                                grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
+                            grads_pc_clipped.append(grad)
+                        opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
+
             if record_stats and ep_idx % record_interval == 0:
                 # calculate and record TTC and write 1 frame to the video
                 speed_phase = info['speed_phase']
@@ -356,6 +401,10 @@ for trial in range(start_trial, n_trials):
                     img = env.render(mode='rgb_array', offset=offset, isRandom=isRandom)
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     video.write(img)
+                if hindsight_learn and env.time >= 10.0 / env.FPS:
+                    offset_dynamic_list.append(offset)
+                    H_dynamic_list.append(H_TTC_diff)
+                    H_hat_dynamic_list.append(Hdst_hat)
             
             episode_reward += reward
 
@@ -363,9 +412,9 @@ for trial in range(start_trial, n_trials):
             ## save transition tuple to the replay buffer, then train on batch w/ or w/o schedule ##
             if use_per_buffer is True:
                 if use_env_prior:
-                    per_buffer.push(observation, action, reward, next_obv, done, obv_prior)
+                    per_buffer.push(observation, action, reward, next_obv, done, R_te, obv_prior)
                 else:
-                    per_buffer.push(observation, action, reward, next_obv, done)
+                    per_buffer.push(observation, action, reward, next_obv, done, R_te)
                 observation = next_obv
                 batch_data = None
                 if len(per_buffer) > learning_start:
@@ -373,14 +422,14 @@ for trial in range(start_trial, n_trials):
                 efe_N = batch_size * 1.0
                 if batch_data is not None:
                     if use_env_prior:
-                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior, batch_indices, batch_weights] = batch_data
+                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_R_te, batch_prior, batch_indices, batch_weights] = batch_data
                     else:
-                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_indices, batch_weights] = batch_data
+                        [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_R_te, batch_indices, batch_weights] = batch_data
                     batch_action = tf.one_hot(batch_action, depth=dim_a)
                     if use_env_prior:
-                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, obv_prior=batch_prior, reward=batch_reward)
+                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_R_te, batch_weights, obv_prior=batch_prior, reward=batch_reward)
                     else:
-                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_weights, reward=batch_reward)
+                        grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, efe_t, efe_target, priorities = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_R_te, batch_weights, reward=batch_reward)
                     per_buffer.update_priorities(batch_indices, priorities.numpy())
             else:
                 if action_delay:
@@ -389,14 +438,14 @@ for trial in range(start_trial, n_trials):
                     else:
                         origin_obv = obv_buffer.popleft()
                         if use_env_prior:
-                            replay_buffer.push(origin_obv, delayed_action, reward, next_obv, done, obv_prior)
+                            replay_buffer.push(origin_obv, delayed_action, reward, next_obv, done, R_te, obv_prior)
                         else:
-                            replay_buffer.push(origin_obv, delayed_action, reward, next_obv, done)
+                            replay_buffer.push(origin_obv, delayed_action, reward, next_obv, done, R_te)
                 else:
                     if use_env_prior:
-                        replay_buffer.push(observation, action, reward, next_obv, done, obv_prior)
+                        replay_buffer.push(observation, action, reward, next_obv, done, R_te, obv_prior)
                     else:
-                        replay_buffer.push(observation, action, reward, next_obv, done)
+                        replay_buffer.push(observation, action, reward, next_obv, done, R_te)
                 
                 observation = next_obv
 
@@ -424,13 +473,13 @@ for trial in range(start_trial, n_trials):
                         for _ in range(gradient_steps):
                             batch_data = replay_buffer.sample(batch_size)
                             if use_env_prior:
-                                [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_prior] = batch_data
+                                [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_R_te, batch_prior] = batch_data
                                 batch_action = tf.one_hot(batch_action, depth=dim_a)
-                                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, obv_prior=batch_prior, reward=batch_reward)
+                                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_R_te, obv_prior=batch_prior, reward=batch_reward)
                             else:
-                                [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done] = batch_data
+                                [batch_obv, batch_action, batch_reward, batch_next_obv, batch_done, batch_R_te] = batch_data
                                 batch_action = tf.one_hot(batch_action, depth=dim_a)
-                                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, R_te, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, reward=batch_reward)
+                                grads_efe, grads_model, loss_efe, loss_model, loss_l2, R_ti, efe_t, efe_target = pplModel.train_step(batch_obv, batch_next_obv, batch_action, batch_done, batch_R_te, reward=batch_reward)
 
                             if tf.math.is_nan(loss_efe):
                                 print("loss_efe nan at frame #", frame_idx)
@@ -482,16 +531,16 @@ for trial in range(start_trial, n_trials):
 
         if hindsight_learn:
             # learn from hindsight error
-            grads_pc, loss_h_reconst, loss_h_error = pplModel.train_pc(init_condition, env.hindsight_error)
-            grads_pc_clipped = []
-            for grad in grads_pc:
-                if grad is not None:
-                    grad = tf.clip_by_norm(grad, clip_norm=grad_norm_clip)
-                grads_pc_clipped.append(grad)
-            opt2.apply_gradients(zip(grads_pc_clipped, pplModel.param_var))
+            print("frame {0}, L.h_reconst = {1}, L.h_error = {2}".format(frame_idx, loss_h_reconst.numpy(),
+                  loss_h_error.numpy()))
+            print("alpha {}, beta {}".format(pplModel.alpha.numpy(), pplModel.beta.numpy()))
             # record hindsight error
             hindsight_error_list.append(env.hindsight_error)
-            offset_list.append(offset)
+            offset_list.append(np.asarray(offset_dynamic_list))
+            H_TTC_diff_list.append(np.asarray(H_dynamic_list))
+            hdst_hat_list.append(np.asarray(H_hat_dynamic_list))
+            alpha_list.append(pplModel.alpha.numpy())
+            beta_list.append(pplModel.beta.numpy())
         if reward == 0:
             # record who passes the interception point first
             if env.state[0] < env.state[2]:
@@ -521,14 +570,13 @@ for trial in range(start_trial, n_trials):
                 if args.getArg("env_name") == "InterceptionEnv":
                     f_speed_idx = np.random.randint(3)
                     env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
-                    env.seed(seed=seed)
                 observation = env.reset()
                 episode_reward = 0
                 done_test = False
                 while not done_test:
                     obv = tf.convert_to_tensor(observation, dtype=tf.float32)
                     obv = tf.expand_dims(obv, axis=0)
-                    action = pplModel.act(obv)
+                    action, _, _ = pplModel.act(obv)
                     action = action.numpy().squeeze()
                     observation, reward, done_test, _ = env.step(action)
                     episode_reward += reward
@@ -586,6 +634,11 @@ for trial in range(start_trial, n_trials):
         np.save("{0}trial_{1}_EFE_values.npy".format(out_dir, trial), EFE_values_trial_list)
         print("==> Saving hindsight error sequence...")
         np.save("{0}trial_{1}_hindsight_errors.npy".format(out_dir, trial), hindsight_error_list)
+        np.save("{0}trial_{1}_H_dynamic.npy".format(out_dir, trial), H_TTC_diff_list)
+        np.save("{0}trial_{1}_H_hat_dynamic.npy".format(out_dir, trial), hdst_hat_list)
+        print("==> Saving alpha and bets sequence...")
+        np.save("{0}trial_{1}_alpha.npy".format(out_dir, trial), alpha_list)
+        np.save("{0}trial_{1}_beta.npy".format(out_dir, trial), beta_list)
         print("==> Saving TTC_diff sequence...")
         np.save("{0}trial_{1}_TTC_diffs.npy".format(out_dir, trial), np.asarray(TTC_diff_list))
         print("==> Saving offset sequence...")
