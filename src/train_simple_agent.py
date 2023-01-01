@@ -63,7 +63,7 @@ options, remainder = getopt.getopt(sys.argv[1:], '', ["cfg_fname=","gpu_id="])
 # Collect arguments from argv
 cfg_fname = "run_interception_ai.cfg"
 use_gpu = True
-gpu_id = 0
+# gpu_id = 0
 for opt, arg in options:
     if opt in ("--cfg_fname"):
         cfg_fname = arg.strip()

@@ -106,7 +106,7 @@ class QAIModel:
         act_fun = self.act_fx #"relu"
         efe_act_fun = self.efe_act_fx #"relu6"
         wght_sd = 0.025
-        init_type = "alex_uniform"
+        init_type = "he_normal" #"alex_uniform"
 
         self.efe_target = ProbMLP(name="EFE_targ",z_dims=efe_dims, act_fun=efe_act_fun, wght_sd=wght_sd,
                                   init_type=init_type,use_layer_norm=self.layer_norm, seed=self.seed)

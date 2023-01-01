@@ -191,7 +191,7 @@ class ProbMLP:
             print(tf.norm(self.param_var[l]))
         print("=====================")
 
-    #@tf.function
+    @tf.function
     def predict(self, o_t): # predict but do not store activity states
         z_in = o_t
         for l in range(1, len(self.W)):
