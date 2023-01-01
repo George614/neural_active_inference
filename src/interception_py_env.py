@@ -79,7 +79,7 @@ class InterceptionEnv(gym.Env):
         self.target_min_speed = 10.0
         # FPS is set to match the frame rate of human subject experiments
         self.FPS = 60
-        self.lag_coefficient = float(1.0 / self.FPS)
+        self.lag_coefficient = float(0.5 / self.FPS)
         self.viewer = None
         self.action_type = 'speed'  # 'acceleration' or 'speed'
         self.return_prior = return_prior  # type of prior to use: either in obv space or prior space
@@ -172,34 +172,31 @@ class InterceptionEnv(gym.Env):
 
         ## calculate estimated required subject speed  ##
         # based on status of target changing its speed
-        if speed_phase == 0:
-            if self.est_time_to_ramp < 0:  # speed change is later than the estimation
-                self.est_time_to_ramp = 1.0 / self.FPS # assume target will change speed in next frame
-            target_dis_to_ramp = target_speed * self.est_time_to_ramp
-            target_dis_during_ramp = (target_speed + self.target_fspeed_mean) * 0.5 * self.speed_change_duration
-            target_TTC_last_part = (target_dis - target_dis_to_ramp - target_dis_during_ramp) / self.target_fspeed_mean
-            target_TTC = target_TTC_last_part + self.speed_change_duration + self.est_time_to_ramp
-            if self.perfect_prior:
-                required_speed = subject_dis / target_TTC
-            else:
-                required_speed = first_order_speed
-        elif speed_phase == 1:
-            # when speed change is ealier than the estimation, i.e. self.est_time_to_ramp > 0,
-            # ignore est_time_to_ramp
-            time_past_in_ramp = self.time - self.time_to_change_speed
-            if self.use_slope:
-                est_target_fspeed = self.target_final_speed
-            else:
-                est_target_fspeed = self.target_fspeed_mean
-            target_dis_ramp = (target_speed + est_target_fspeed) * 0.5 * (self.speed_change_duration - time_past_in_ramp)
-            target_TTC_last_part = (target_dis - target_dis_ramp) / est_target_fspeed
-            target_TTC = target_TTC_last_part + self.speed_change_duration - time_past_in_ramp
-            if self.perfect_prior:
-                required_speed = subject_dis / target_TTC
-            else:
-                required_speed = first_order_speed
-        elif speed_phase == 2:
+        if not self.perfect_prior:
             required_speed = first_order_speed
+        else:
+            if speed_phase == 0:
+                if self.est_time_to_ramp < 0:  # speed change is later than the estimation
+                    self.est_time_to_ramp = 1.0 / self.FPS # assume target will change speed in next frame
+                target_dis_to_ramp = target_speed * self.est_time_to_ramp
+                target_dis_during_ramp = (target_speed + self.target_fspeed_mean) * 0.5 * self.speed_change_duration
+                target_TTC_last_part = (target_dis - target_dis_to_ramp - target_dis_during_ramp) / self.target_fspeed_mean
+                target_TTC = target_TTC_last_part + self.speed_change_duration + self.est_time_to_ramp
+                required_speed = subject_dis / target_TTC                    
+            elif speed_phase == 1:
+                # when speed change is ealier than the estimation, i.e. self.est_time_to_ramp > 0,
+                # ignore est_time_to_ramp
+                time_past_in_ramp = self.time - self.time_to_change_speed
+                if self.use_slope:
+                    est_target_fspeed = self.target_final_speed
+                else:
+                    est_target_fspeed = self.target_fspeed_mean
+                target_dis_ramp = (target_speed + est_target_fspeed) * 0.5 * (self.speed_change_duration - time_past_in_ramp)
+                target_TTC_last_part = (target_dis - target_dis_ramp) / est_target_fspeed
+                target_TTC = target_TTC_last_part + self.speed_change_duration - time_past_in_ramp
+                required_speed = subject_dis / target_TTC
+            elif speed_phase == 2:
+                required_speed = first_order_speed
             
         ## apply action and calculate prior ##
         if self.action_type == 'speed': # choose pedal position
@@ -224,18 +221,19 @@ class InterceptionEnv(gym.Env):
                         # use prior center at offset: speed_diff ~ N(offset, sigma)
                         prior_speed_diffs = [np.abs(diff - offset) for diff in prior_speed_diffs]
                         action_prior = np.argmin(prior_speed_diffs)
-                pedal_speed_prior = self.action_speed_mappings[action_prior]
-                prior_sub_speed = subject_speed + (pedal_speed_prior - subject_speed) * self.lag_coefficient
-                prior_sub_dis = subject_dis - prior_sub_speed / self.FPS
-                prior_target_dis = target_dis - target_speed / self.FPS
-                # prior_obv = (prior_target_dis, target_speed, prior_sub_dis, prior_sub_speed)
-                # scale the observations to range (-1, 1)
-                scaled_prior_target_dis = 2 * (prior_target_dis / self.target_init_distance - 0.5)
-                scaled_prior_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
-                scaled_prior_sub_dis = 2 * (prior_sub_dis / self.subject_max_position - 0.5)
-                scaled_prior_sub_speed = 2 * (prior_sub_speed / self.subject_speed_max - 0.5)
-                prior_scaled_obv = (scaled_prior_target_dis, scaled_prior_target_speed, scaled_prior_sub_dis, scaled_prior_sub_speed)
-                prior_scaled_obv = np.asarray(prior_scaled_obv, dtype=np.float32)
+                if self.return_prior == 'prior_obv':
+                    pedal_speed_prior = self.action_speed_mappings[action_prior]
+                    prior_sub_speed = subject_speed + (pedal_speed_prior - subject_speed) * self.lag_coefficient
+                    prior_sub_dis = subject_dis - prior_sub_speed / self.FPS
+                    prior_target_dis = target_dis - target_speed / self.FPS
+                    # prior_obv = (prior_target_dis, target_speed, prior_sub_dis, prior_sub_speed)
+                    # scale the observations to range (-1, 1)
+                    scaled_prior_target_dis = 2 * (prior_target_dis / self.target_init_distance - 0.5)
+                    scaled_prior_target_speed = 2 * (target_speed / self.target_max_speed - 0.5)
+                    scaled_prior_sub_dis = 2 * (prior_sub_dis / self.subject_max_position - 0.5)
+                    scaled_prior_sub_speed = 2 * (prior_sub_speed / self.subject_speed_max - 0.5)
+                    prior_scaled_obv = (scaled_prior_target_dis, scaled_prior_target_speed, scaled_prior_sub_dis, scaled_prior_sub_speed)
+                    prior_scaled_obv = np.asarray(prior_scaled_obv, dtype=np.float32)
             
             if action is not None:
                 pedal_speed = self.action_speed_mappings[action]
