@@ -24,9 +24,10 @@ def calc_window_mean(window):
 
 approach_angle_idx = 3
 env_prior = 'prior_error'
-use_slope = True
+use_slope = False
+perfect_prior = False
 number_trials = 5
-number_episodes = 1000
+number_episodes = 3000
 
 all_win_mean = []
 
@@ -37,7 +38,7 @@ for tr in range(number_trials):
     
     for ep in tqdm(range(number_episodes)):
         target_speed_idx = np.random.randint(3)
-        env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior, use_slope=use_slope)
+        env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior, use_slope=use_slope, perfect_prior=perfect_prior)
         # print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
         env.reset()
         done = False
@@ -52,8 +53,8 @@ for tr in range(number_trials):
             reward_window.pop(0)
         reward_window_mean = calc_window_mean(reward_window)
         trial_win_mean.append(reward_window_mean)
-    
-    env.close()
+        env.close()
+        
     all_win_mean.append(np.asarray(trial_win_mean))
 
 all_win_mean = np.stack(all_win_mean)
@@ -66,4 +67,4 @@ ax.legend(loc='upper right')
 ax.set_ylabel("Rewards")
 ax.set_xlabel("Number of episodes")
 ax.set_title("Window-averaged rewards")
-fig.savefig(os.getcwd() + "/prior_mean_win_rewards.png", dpi=200)
+fig.savefig(os.getcwd() + "/first-order_prior_rewards.jpg", dpi=300)

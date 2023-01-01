@@ -4,7 +4,9 @@ import random
 
 class ReplayBuffer(object):
     '''
-    Vanilla Experience Replay Buffer
+    Experience Replay Buffer with extra recordings 
+    for epistemic value and prior preference.
+    Built upon the following reference:
     Ref: https://github.com/higgsfield/RL-Adventure
     '''
     def __init__(self, capacity, seed=None):

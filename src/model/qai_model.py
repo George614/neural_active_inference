@@ -357,10 +357,8 @@ class QAIModel:
                             efe_target = efe_tp1_v + (efe_tp1_ad - tf.reduce_mean(efe_tp1_ad, axis=-1, keepdims=True))
                     else:
                         efe_target, _, _ = self.efe_target.predict(obv_next)
-                    idx_a_next = tf.math.argmax(efe_target, axis=-1, output_type=tf.dtypes.int32)
-                    onehot_a_next = tf.one_hot(idx_a_next, depth=self.dim_a)
                     # take the new EFE values
-                    efe_new = tf.math.reduce_sum(efe_target * onehot_a_next, axis=-1)
+                    efe_new = tf.math.reduce_max(efe_target, axis=1, keepdims=True)
                     y_j = R_t + (efe_new * self.gamma_d) * (1 - done)
             else:
                 efe_old = efe_t

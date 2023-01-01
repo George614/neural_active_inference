@@ -25,7 +25,7 @@ exp_dir_list = ["DQN_noDelay_reward_discount0.0_pedal1.0_relu_learnSche_3k",
                 "recogNN_noDelay_InstEpst_discount0.99_pedal1.0_relu_learnSche_3k",
                 "DQN_noDelay_reward_discount0.99_pedal0.5_relu_learnSche_3k",
                 "simpleNN_noDelay_InstOnly_discount0.99_pedal0.5_relu_learnSche_3k",
-                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0.99_pedal0.5_relu_learnSche_3k_tune2"]
+                "recogNN_noDelay_InstEpst_discount0.99_pedal0.5_relu_learnSche_3k"]
 input_dirs = [parent_dir + exp_dir for exp_dir in exp_dir_list]
 grouped_dirs = [input_dirs[i*3:i*3+3] for i in range(4)]
 win_reward_np_list = []
@@ -167,7 +167,7 @@ def plot_rewards_subplots(grouped_dirs):
     ax11.text(0.0, 1.0, 'D', transform=ax11.transAxes + trans,
             fontsize='medium', va='bottom', fontfamily='serif')
     ax11.get_legend().remove()
-    fig.savefig(os.getcwd() + "/DQN_AIFInstOnly_InstEpst_rewards_compare.png", dpi=300, bbox_inches="tight")
+    fig.savefig(os.getcwd() + "/DQN_AIFInstOnly_InstEpst_rewards_compare.jpg", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 plot_rewards_subplots(grouped_dirs)

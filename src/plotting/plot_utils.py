@@ -14,7 +14,7 @@ from pathlib import Path
 from collections import deque
 import subprocess
 
-out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_InstEpst_discount0.0_pedal0.5_relu_learnSche_3k/"
+out_dir = "D:/Projects/neural_active_inference/exp/interception/qai/recogNN_noDelay_InstEpst_discount0.99_pedal0.5_relu_learnSche_3k/"
 result_dir = Path(out_dir)
 num_trials = 5
 num_episodes = 3000
@@ -189,7 +189,7 @@ def plot_compare_TTC(out_dirs, TTC_list=None):
     ax11.text(0.0, 1.0, 'D', transform=ax11.transAxes + trans,
             fontsize='medium', va='bottom', fontfamily='serif')
     ax11.get_legend().remove()
-    fig.savefig(os.getcwd() + "/TTC_boxplot_compare.png", dpi=300, bbox_inches="tight")
+    fig.savefig(os.getcwd() + "/TTC_boxplot_compare.jpg", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -370,7 +370,7 @@ if __name__ == '__main__':
     out_dirs = ["recogNN_firstOrderPriorEnv_noDelay_InstEpst0.25_discount0_relu_learnSche_3k",
                 "recogNN_noDelay_InstEpst_discount0.0_pedal0.5_relu_learnSche_3k",
                 "recogNN_noDelay_InstEpst_discount0.99_pedal1.0_relu_learnSche_3k",
-                "recogNN_noDelay_InstEpst_DynamicHdstBuffer_discount0.99_pedal0.5_relu_learnSche_3k_tune2"]
+                "recogNN_noDelay_InstEpst_discount0.99_pedal0.5_relu_learnSche_3k"]
     out_dirs = [root_dir + out_dir for out_dir in out_dirs]
     plot_compare_TTC(out_dirs)
     # plot_all_EFE()
