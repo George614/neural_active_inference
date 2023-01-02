@@ -207,6 +207,7 @@ class InterceptionEnv(gym.Env):
                     pedal_speed_n = self.action_speed_mappings[prior_action]
                     prior_sub_speed_n = subject_speed + (pedal_speed_n - subject_speed) * self.lag_coefficient
                     prior_speed_diff = prior_sub_speed_n - required_speed
+                    prior_speed_diff = np.clip(prior_speed_diff, -15.0, 15.0)
                     prior_speed_diffs.append(prior_speed_diff)
                 if offset is None:
                     # use prior centered at 0: speed_diff ~ N(0, sigma)
