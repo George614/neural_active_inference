@@ -10,19 +10,21 @@ two free parameters, i.e., a multivariate Gaussian with mean and variance.
 
 @author: Alex Ororbia
 """
+
+
 class ProbMLP:
     def __init__(self, name, z_dims, act_fun="tanh", out_fun="identity", init_type="gaussian",
                  wght_sd=0.05, model_variance=False, sigma_fun="softplus", load_dict=None,
                  use_layer_norm=False, seed=0):
         self.name = name
         self.seed = seed
-        self.z_dims = z_dims # [input_dim, n_hid, ...., output_dim]
+        self.z_dims = z_dims  # [input_dim, n_hid, ...., output_dim]
         self.model_variance = model_variance
         self.use_layer_norm = use_layer_norm
 
         self.param_axis = 0
-        self.param_radius = -1.0 #-10.0 # -10.0 #-5.0
-        self.update_radius = -1.0 #5.0 # -1.0 #-10.0 #-1.0 #-5.0 #10.0 #-1.0
+        self.param_radius = -1.0  # -10.0 # -10.0 #-5.0
+        self.update_radius = -1.0  # 5.0 # -1.0 #-10.0 #-1.0 #-5.0 #10.0 #-1.0
         self.eta = 0.05
         if sigma_fun == "softplus":
             self.sigma_fx = tf.math.softplus
@@ -38,7 +40,7 @@ class ProbMLP:
 
         self.Sigma_W = None
         self.Sigma_b = None
-        self.W = [] # W0=null, W1, W2...
+        self.W = []  # W0=null, W1, W2...
         self.b = []
         self.alpha_w = []
         self.beta_b = []
@@ -49,86 +51,98 @@ class ProbMLP:
         self.param_var = []
 
         if load_dict is not None:
-            #print("----")
+            # print("----")
             cnt = 0
             for item in load_dict.items():
                 vname, var = item
-                #print(vname)
-                #print(var.shape)
+                # print(vname)
+                # print(var.shape)
                 if "mu_b" in vname:
-                    var = tf.expand_dims(tf.cast(var,dtype=tf.float32),axis=0)
-                    b_l = tf.Variable(var, name="b-mu".format(cnt) )
+                    var = tf.expand_dims(
+                        tf.cast(var, dtype=tf.float32), axis=0)
+                    b_l = tf.Variable(var, name="b-mu".format(cnt))
                     self.mu_b = b_l
                 elif "mu_w" in vname:
-                    W_l = tf.Variable(tf.cast(var,dtype=tf.float32), name="W-mu".format(cnt) )
+                    W_l = tf.Variable(
+                        tf.cast(var, dtype=tf.float32), name="W-mu".format(cnt))
                     self.mu_W = W_l
                     #print("LOCK: ",self.Sigma_W.shape)
                 elif "std_b" in vname:
-                    var = tf.expand_dims(tf.cast(var,dtype=tf.float32),axis=0)
-                    b_l = tf.Variable(var, name="b-stddev".format(cnt) )
+                    var = tf.expand_dims(
+                        tf.cast(var, dtype=tf.float32), axis=0)
+                    b_l = tf.Variable(var, name="b-stddev".format(cnt))
                     self.Sigma_b = b_l
                 elif "std_w" in vname:
-                    W_l = tf.Variable(tf.cast(var,dtype=tf.float32), name="W-stddev".format(cnt) )
+                    W_l = tf.Variable(
+                        tf.cast(var, dtype=tf.float32), name="W-stddev".format(cnt))
                     self.Sigma_W = W_l
                     #print("LOCK: ",self.Sigma_W.shape)
                 elif "_b" in vname:
-                    var = tf.expand_dims(tf.cast(var,dtype=tf.float32),axis=0)
-                    b_l = tf.Variable(var, name="b{0}".format(cnt) )
+                    var = tf.expand_dims(
+                        tf.cast(var, dtype=tf.float32), axis=0)
+                    b_l = tf.Variable(var, name="b{0}".format(cnt))
                     self.b.append(b_l)
                 elif "_w" in vname:
-                    W_l = tf.Variable(tf.cast(var,dtype=tf.float32), name="W{0}".format(cnt) )
+                    W_l = tf.Variable(
+                        tf.cast(var, dtype=tf.float32), name="W{0}".format(cnt))
                     self.W.append(W_l)
 
                 cnt += 1
-            #print("----")
+            # print("----")
         else:
             for l in range(1, len(z_dims)-1):
                 n_z_l = z_dims[l]
                 n_z_lm1 = z_dims[l-1]
-                W_l = init_weights(init_type, [n_z_lm1, n_z_l], stddev=wght_sd, seed=self.seed)
-                W_l = tf.Variable(W_l, name="W{0}".format(l) )
+                W_l = init_weights(
+                    init_type, [n_z_lm1, n_z_l], stddev=wght_sd, seed=self.seed)
+                W_l = tf.Variable(W_l, name="W{0}".format(l))
                 self.W.append(W_l)
                 self.param_var.append(W_l)
-                b_l = tf.zeros([1, n_z_l]) #init_weights(init_type, [1, n_z_l], stddev=wght_sd, seed=self.seed)
-                b_l = tf.Variable(b_l, name="b{0}".format(l) )
+                # init_weights(init_type, [1, n_z_l], stddev=wght_sd, seed=self.seed)
+                b_l = tf.zeros([1, n_z_l])
+                b_l = tf.Variable(b_l, name="b{0}".format(l))
                 self.b.append(b_l)
                 self.param_var.append(b_l)
                 if self.use_layer_norm is True:
                     W_l = tf.ones([1, n_z_l])
-                    W_l = tf.Variable(W_l, name="alpha_w{0}".format(l) )
+                    W_l = tf.Variable(W_l, name="alpha_w{0}".format(l))
                     self.alpha_w.append(W_l)
                     self.param_var.append(W_l)
                     W_l = tf.zeros([1, n_z_l])
-                    W_l = tf.Variable(W_l, name="beta_b{0}".format(l) )
+                    W_l = tf.Variable(W_l, name="beta_b{0}".format(l))
                     self.beta_b.append(W_l)
                     self.param_var.append(W_l)
             n_z_l = z_dims[len(z_dims)-1]
             n_z_lm1 = z_dims[len(z_dims)-2]
-            mu_W = init_weights(init_type, [n_z_lm1, n_z_l], stddev=wght_sd, seed=self.seed) #* wght_sd
-            mu_W = tf.Variable(mu_W, name="W_mu" )
+            mu_W = init_weights(
+                init_type, [n_z_lm1, n_z_l], stddev=wght_sd, seed=self.seed)  # * wght_sd
+            mu_W = tf.Variable(mu_W, name="W_mu")
             self.mu_W = mu_W
-            #print(self.name)
-            #print(mu_W.shape)
+            # print(self.name)
+            # print(mu_W.shape)
             self.param_var.append(mu_W)
-            mu_b = tf.zeros([1, n_z_l]) #init_weights(init_type, [1, n_z_l], stddev=wght_sd, seed=self.seed) * 0 #* wght_sd
-            mu_b = tf.Variable(mu_b, name="b_mu" )
+            # init_weights(init_type, [1, n_z_l], stddev=wght_sd, seed=self.seed) * 0 #* wght_sd
+            mu_b = tf.zeros([1, n_z_l])
+            mu_b = tf.Variable(mu_b, name="b_mu")
             self.mu_b = mu_b
-            #print(mu_b.shape)
+            # print(mu_b.shape)
             self.param_var.append(mu_b)
 
             if self.model_variance is True:
                 n_z_l = z_dims[len(z_dims)-1]
                 n_z_lm1 = z_dims[len(z_dims)-2]
-                Sigma_W = init_weights(init_type, [n_z_lm1, n_z_l], stddev=wght_sd, seed=self.seed) #* wght_sd
-                Sigma_W = tf.Variable(Sigma_W, name="W_sigma" )
+                Sigma_W = init_weights(
+                    init_type, [n_z_lm1, n_z_l], stddev=wght_sd, seed=self.seed)  # * wght_sd
+                Sigma_W = tf.Variable(Sigma_W, name="W_sigma")
                 self.Sigma_W = Sigma_W
                 self.param_var.append(Sigma_W)
-                Sigma_b = tf.zeros([1, n_z_l]) #init_weights(init_type, [1, n_z_l], stddev=wght_sd, seed=self.seed) * 0 #* wght_sd
-                Sigma_b = tf.Variable(Sigma_b, name="b_sigma" )
+                # init_weights(init_type, [1, n_z_l], stddev=wght_sd, seed=self.seed) * 0 #* wght_sd
+                Sigma_b = tf.zeros([1, n_z_l])
+                Sigma_b = tf.Variable(Sigma_b, name="b_sigma")
                 self.Sigma_b = Sigma_b
                 self.param_var.append(Sigma_b)
 
-        self.opt = self.set_optimizer(opt_type="sgd",eta=0.01)
+        self.opt = self.set_optimizer(opt_type="sgd", eta=0.01)
 
     def extract_params(self):
         param_list = []
@@ -137,36 +151,42 @@ class ProbMLP:
         return param_list
 
     def set_optimizer(self, opt_type, eta, momentum=0.9, epsilon=1e-08):
-        moment_v = tf.Variable( momentum )
-        eta_v  = tf.Variable( eta )
+        moment_v = tf.Variable(momentum)
+        eta_v = tf.Variable(eta)
         if opt_type == "nag":
-            optimizer = tf.compat.v1.train.MomentumOptimizer(learning_rate=eta_v,momentum=moment_v,use_nesterov=True)
+            optimizer = tf.compat.v1.train.MomentumOptimizer(
+                learning_rate=eta_v, momentum=moment_v, use_nesterov=True)
         elif opt_type == "momentum":
-            optimizer = tf.compat.v1.train.MomentumOptimizer(learning_rate=eta_v,momentum=moment_v,use_nesterov=False)
+            optimizer = tf.compat.v1.train.MomentumOptimizer(
+                learning_rate=eta_v, momentum=moment_v, use_nesterov=False)
         elif opt_type == "adam":
-            optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=eta_v,beta1=0.9, beta2=0.999, epsilon=epsilon) #1e-08)
+            optimizer = tf.compat.v1.train.AdamOptimizer(
+                learning_rate=eta_v, beta1=0.9, beta2=0.999, epsilon=epsilon)  # 1e-08)
         elif opt_type == "rmsprop":
-            optimizer = tf.compat.v1.train.RMSPropOptimizer(learning_rate=eta_v,decay=0.9, momentum=moment_v, epsilon=1e-10)
+            optimizer = tf.compat.v1.train.RMSPropOptimizer(
+                learning_rate=eta_v, decay=0.9, momentum=moment_v, epsilon=1e-10)
         else:
-            optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=eta_v)
+            optimizer = tf.compat.v1.train.GradientDescentOptimizer(
+                learning_rate=eta_v)
         #print(" Opt.Properties: {0} w/ eta = {1}".format(opt_type, alpha))
-        self.eta = eta_v #eta
+        self.eta = eta_v  # eta
         self.opt = optimizer
 
     def set_weight_norm(self, param_radius=1.0):
         self.param_radius = param_radius
         self.normalize_weights()
 
-    #@tf.function
+    # @tf.function
     def normalize_weights(self):
         """
             Enforces weight column normalization constraint
         """
         if self.param_radius > 0:
             for l in range(0, len(self.param_var)):
-                self.param_var[l].assign( tf.clip_by_norm(self.param_var[l], self.param_radius, axes=[self.param_axis]) )
+                self.param_var[l].assign(tf.clip_by_norm(
+                    self.param_var[l], self.param_radius, axes=[self.param_axis]))
 
-    def set_weights(self, source, tau=-1): #0.001):
+    def set_weights(self, source, tau=-1):  # 0.001):
         """
             Deep copies weights of another ncn/ngc model into this model
         """
@@ -174,14 +194,16 @@ class ProbMLP:
         if tau >= 0.0:
             for l in range(len(self.param_var)):
                 if type(source) is list:
-                    self.param_var[l].assign(self.param_var[l] * (1 - tau) + source[l] * tau)
+                    self.param_var[l].assign(
+                        self.param_var[l] * (1 - tau) + source[l] * tau)
                 else:
-                    self.param_var[l].assign(self.param_var[l] * (1 - tau) + source.param_var[l] * tau)
+                    self.param_var[l].assign(
+                        self.param_var[l] * (1 - tau) + source.param_var[l] * tau)
         else:
             for l in range(len(self.param_var)):
                 if type(source) is list:
                     self.param_var[l].assign(source[l])
-                else:    
+                else:
                     self.param_var[l].assign(source.param_var[l])
 
     def view_wnorms(self):
@@ -192,7 +214,7 @@ class ProbMLP:
         print("=====================")
 
     # @tf.function
-    def predict(self, o_t): # predict but do not store activity states
+    def predict(self, o_t):  # predict but do not store activity states
         z_in = o_t
         for l in range(1, len(self.W)):
             z_l = tf.matmul(z_in, self.W[l]) + self.b[l]
@@ -209,16 +231,16 @@ class ProbMLP:
 
             z_in = zf_l
         # apply top-most layer -- (output) mean and variance calculation
-        mu = self.ofx( tf.matmul(z_in, self.mu_W) + self.mu_b )
-        sigma = tf.cast(0.1,dtype=tf.float32)
+        mu = self.ofx(tf.matmul(z_in, self.mu_W) + self.mu_b)
+        sigma = tf.cast(0.1, dtype=tf.float32)
         log_sigma = tf.math.log(sigma)
         if self.model_variance is True:
             log_sigma = tf.matmul(z_in, self.Sigma_W) + self.Sigma_b
-            sigma = self.sigma_fx(log_sigma) #tf.math.exp(log_sigma)
+            sigma = self.sigma_fx(log_sigma)  # tf.math.exp(log_sigma)
             sigma = tf.clip_by_value(sigma, 0.01, 10.0)
         return mu, sigma, log_sigma
 
-    #@tf.function
+    # @tf.function
     def update_params(self, delta_list, update_radius=-1.):
         if update_radius > 0.0:
             for d in range(len(delta_list)):

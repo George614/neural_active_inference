@@ -11,9 +11,10 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from interception_py_env import InterceptionEnv
 
+
 def calc_window_mean(window):
     """
-        Calculates the mean/average over a finite window of values
+    Calculates the mean/average over a finite window of values
     """
     mu = 0.0
     for i in range(len(window)):
@@ -22,8 +23,9 @@ def calc_window_mean(window):
     mu = mu / (len(window) * 1.0)
     return mu
 
+
 approach_angle_idx = 3
-env_prior = 'prior_error'
+env_prior = "prior_error"
 use_slope = False
 perfect_prior = False
 number_trials = 5
@@ -35,18 +37,28 @@ for tr in range(number_trials):
     global_reward = []
     reward_window = []
     trial_win_mean = []
-    
+
     for ep in tqdm(range(number_episodes)):
         target_speed_idx = np.random.randint(3)
-        env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior, use_slope=use_slope, perfect_prior=perfect_prior)
-        # print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
+        env = InterceptionEnv(
+            target_speed_idx,
+            approach_angle_idx,
+            return_prior=env_prior,
+            use_slope=use_slope,
+            perfect_prior=perfect_prior,
+        )
+        print(
+            "Interception environment with target_speed_idx {} and approach_angle_idx {}".format(
+                target_speed_idx, approach_angle_idx
+            )
+        )
         env.reset()
         done = False
         episode_reward = 0
         while not done:
             next_obv, reward, done, prior, _ = env.step()
             episode_reward += reward
-            
+
         global_reward.append(episode_reward)
         reward_window.append(episode_reward)
         if len(reward_window) > 100:
@@ -54,16 +66,29 @@ for tr in range(number_trials):
         reward_window_mean = calc_window_mean(reward_window)
         trial_win_mean.append(reward_window_mean)
         env.close()
-        
+
     all_win_mean.append(np.asarray(trial_win_mean))
 
 all_win_mean = np.stack(all_win_mean)
 mean_rewards = np.mean(all_win_mean, axis=0)
 std_rewards = np.std(all_win_mean, axis=0)
 fig, ax = plt.subplots()
-ax.plot(np.arange(len(mean_rewards)), mean_rewards, alpha=1.0, color='red', label='mean', linewidth=0.5)
-ax.fill_between(np.arange(len(mean_rewards)), np.clip(mean_rewards - std_rewards, 0, 1), np.clip(mean_rewards + std_rewards, 0, 1), color='pink', alpha=0.4)
-ax.legend(loc='upper right')
+ax.plot(
+    np.arange(len(mean_rewards)),
+    mean_rewards,
+    alpha=1.0,
+    color="red",
+    label="mean",
+    linewidth=0.5,
+)
+ax.fill_between(
+    np.arange(len(mean_rewards)),
+    np.clip(mean_rewards - std_rewards, 0, 1),
+    np.clip(mean_rewards + std_rewards, 0, 1),
+    color="pink",
+    alpha=0.4,
+)
+ax.legend(loc="upper right")
 ax.set_ylabel("Rewards")
 ax.set_xlabel("Number of episodes")
 ax.set_title("Window-averaged rewards")

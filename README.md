@@ -1,8 +1,8 @@
 # Neural Active Inference (Simplified)
-This repo contains the proposed QAI Model, which is an active inference (AI) agent based on an artificial neural network trained via backpropagation of errors (backprop). This model embodies a key assumptions:
+This repository holds the code for paper *A Neural Active Inference Model of Perceptual-Motor Learning*, which is published on *Frontiers in Computational Neuroscience*, 2023. In this work, we propose an active inference (AI) agent based on an artificial neural network trained via backpropagation of errors (backprop). This model embodies a key assumptions:
 1) A simplified model is sufficient for reasonably-sized state spaces (like Mountain Car, Cartpole, etc.) -- thus this model only jointly adapts a transition model and an expected free energy (EFE) model at each time step.
 2) We only need the simple Q-learning bootstrap principle to train this system (as opposed to policy gradients)
-3) We normalize the instrumental and/or epistemic (scalar) signals according to the dynamic normalization scheme proposed in Ororbia & Mali (2021).
+3) We simplify the Bayesian inference by assuming a uniform prior (or uninformative prior) on the parameters of our model.
 
 To run the code, you can use the following Bash commands.<br>
 To fit/train a local prior model to expert data (imitation learning), which will be later used in the active inference agent (if a local prior is desired), then run the following command (after setting desired values in <code>fit_mcar_prior.cfg</code>):

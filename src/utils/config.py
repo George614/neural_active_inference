@@ -2,6 +2,7 @@ import os
 import sys
 import copy
 
+
 class Config:
     """
     Simple configuration object to house named arguments for experiments
@@ -18,13 +19,12 @@ class Config:
         self.fname = fname
         self.variables = {}
 
-        # read in text file to convert to query-able configuration object
         fd = open(fname, 'r')
         count = 0
         while True:
             count += 1
-            line = fd.readline() # get next line from file
-            if not line: # if line is empty end of file (EOF) has been reached
+            line = fd.readline()
+            if not line:
                 break
             line = line.replace(" ", "").replace("\n", "")
             if len(line) > 0:
@@ -34,10 +34,7 @@ class Config:
                     tok = argmt.split("=")
                     var_name = tok[0]
                     var_val = tok[1]
-                    #print("{0}  ->  {1}".format(var_name,var_val))
                     self.variables[var_name] = var_val
-                # else, ignore comment-only lines
-            # else, ignore empty lines
         fd.close()
 
     def getArg(self, arg_name):

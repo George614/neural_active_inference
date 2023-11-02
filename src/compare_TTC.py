@@ -6,34 +6,37 @@ speeds. Also record TTCs for the designed prior function.
 
 @author: Zhizhuo (George) Yang
 """
+from interception_py_env import InterceptionEnv
+from utils import load_object
+import numpy as np
+import tensorflow as tf
 import os
 import logging
 import sys
 import pickle
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
-import tensorflow as tf
-import numpy as np
 sys.path.insert(0, 'utils/')
-from utils import load_object
 sys.path.insert(0, 'model/')
-from interception_py_env import InterceptionEnv
 
 approach_angle_idx = 3
 num_trials = 50
-env_prior = 'prior_error' # or prior_obv or None
+env_prior = 'prior_error'  # or prior_obv or None
 
 
 def load_AIF_agent(trial_num, episode_num, model_save_path):
-    qaiModel = load_object(model_save_path + "trial_{}_epd_{}.agent".format(trial_num, episode_num))
+    qaiModel = load_object(
+        model_save_path + "trial_{}_epd_{}.agent".format(trial_num, episode_num))
     print("Loaded QAI model from {}".format(model_save_path))
     qaiModel.epsilon.assign(0.0)
     return qaiModel
 
 
 def record_TTC(target_speed_idx, subject_type, qaiModel=None):
-    env = InterceptionEnv(target_speed_idx, approach_angle_idx, return_prior=env_prior)
-    print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(target_speed_idx, approach_angle_idx))
+    env = InterceptionEnv(
+        target_speed_idx, approach_angle_idx, return_prior=env_prior)
+    print("Interception environment with target_speed_idx {} and approach_angle_idx {}".format(
+        target_speed_idx, approach_angle_idx))
 
     target_1st_order_TTC_list = []
     target_actual_mean_TTC_list = []
@@ -66,10 +69,12 @@ def record_TTC(target_speed_idx, subject_type, qaiModel=None):
                     agent_TTC_list.append(agent_TTC)
             else:
                 next_obv, reward, done, _ = env.step(action)
-            observation = next_obv    
+            observation = next_obv
 
-    target_1st_order_TTC_list = [str(round(num, 3)) + " " for num in target_1st_order_TTC_list]
-    target_actual_mean_TTC_list = [str(round(num, 3)) + " " for num in target_actual_mean_TTC_list]
+    target_1st_order_TTC_list = [
+        str(round(num, 3)) + " " for num in target_1st_order_TTC_list]
+    target_actual_mean_TTC_list = [
+        str(round(num, 3)) + " " for num in target_actual_mean_TTC_list]
     agent_TTC_list = [str(round(num, 3)) + " " for num in agent_TTC_list]
 
     with open('TTC_{}_fspeed_idx_{}.txt'.format(subject_type, target_speed_idx), 'w') as f:
@@ -82,6 +87,7 @@ def record_TTC(target_speed_idx, subject_type, qaiModel=None):
         f.write('\n')
         f.write("agent_TTC\n")
         f.writelines(agent_TTC_list)
+
 
 # run the prior function on the task with different target initial speeds
 record_TTC(0, 'prior_function')

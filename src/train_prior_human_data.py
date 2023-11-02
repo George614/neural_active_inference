@@ -9,21 +9,29 @@ import os
 import logging
 import sys, getopt, optparse
 import pickle
-sys.path.insert(0, 'utils/')
-sys.path.insert(0, 'model/')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
-logging.getLogger('tensorflow').setLevel(logging.FATAL)
+
+sys.path.insert(0, "utils/")
+sys.path.insert(0, "model/")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # FATAL
+logging.getLogger("tensorflow").setLevel(logging.FATAL)
 import tensorflow as tf
 import numpy as np
-from utils import parse_int_list, mse, save_object, g_nll_from_logvar, load_object, g_nll
+from utils import (
+    parse_int_list,
+    mse,
+    save_object,
+    g_nll_from_logvar,
+    load_object,
+    g_nll,
+)
 from prob_mlp import ProbMLP
 from config import Config
 
 
 def eval_model(model, test_set, mem_batch_size):
     """
-        Evaluates the (negative) log likelihood of the prior preference model, i.e.,
-        -log p(z_t+1|z_t)
+    Evaluates the (negative) log likelihood of the prior preference model, i.e.,
+    -log p(z_t+1|z_t)
     """
     L = 0.0
     dim_obv = np.shape(test_set)[1]
@@ -42,19 +50,26 @@ def eval_model(model, test_set, mem_batch_size):
         o_mu, o_sigma, o_log_sigma = model.predict(o_t)
         if model.model_variance is True:
             if use_log_form is True:
-                L_prior = g_nll_from_logvar(o_tp1, o_mu, o_log_sigma) * o_tp1.shape[0] # un-normalize avg GNLL
+                L_prior = (
+                    g_nll_from_logvar(o_tp1, o_mu, o_log_sigma) * o_tp1.shape[0]
+                )  # un-normalize avg GNLL
             else:
-                L_prior = g_nll(o_tp1, o_mu, o_sigma * o_sigma) * o_tp1.shape[0] # un-normalize avg GNLL
+                L_prior = (
+                    g_nll(o_tp1, o_mu, o_sigma * o_sigma) * o_tp1.shape[0]
+                )  # un-normalize avg GNLL
         else:
-            L_prior = g_nll(o_tp1, o_mu, o_sigma * 0 + 1.0) * o_tp1.shape[0] # un-normalize avg GNLL
-            #L_prior = g_nll_from_logvar(o_tp1, o_mu, o_log_sigma * 0) * o_tp1.shape[0] # un-normalize avg GNLL
+            L_prior = (
+                g_nll(o_tp1, o_mu, o_sigma * 0 + 1.0) * o_tp1.shape[0]
+            )  # un-normalize avg GNLL
+            # L_prior = g_nll_from_logvar(o_tp1, o_mu, o_log_sigma * 0) * o_tp1.shape[0] # un-normalize avg GNLL
         L = L_prior + L
     return L / (len(test_set) * 1.0)
+
 
 ################################################################################
 # read in configuration file and extract necessary variables/constants
 ################################################################################
-options, remainder = getopt.getopt(sys.argv[1:], '', ["cfg_fname=","gpu_id="])
+options, remainder = getopt.getopt(sys.argv[1:], "", ["cfg_fname=", "gpu_id="])
 # Collect arguments from argv
 cfg_fname = "fit_interception_prior.cfg"
 use_gpu = True
@@ -71,13 +86,13 @@ args = Config(cfg_fname)
 mid = gpu_id
 if use_gpu:
     print(" > Using GPU ID {0}".format(mid))
-    os.environ["CUDA_VISIBLE_DEVICES"]="{0}".format(mid)
-    gpu_tag = '/GPU:0'
-    gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+    os.environ["CUDA_VISIBLE_DEVICES"] = "{0}".format(mid)
+    gpu_tag = "/GPU:0"
+    gpu_devices = tf.config.experimental.list_physical_devices("GPU")
     tf.config.experimental.set_memory_growth(gpu_devices[mid], True)
 else:
-    os.environ["CUDA_VISIBLE_DEVICES"]="-1"
-    gpu_tag = '/CPU:0'
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    gpu_tag = "/CPU:0"
 
 # global experiment arguments
 out_dir = args.getArg("out_dir")
@@ -92,9 +107,9 @@ z_dims = args.getArg("z_dims")
 z_dims = parse_int_list(z_dims)
 obs_dim = int(args.getArg("dim_o"))
 init_type = args.getArg("init_type")
-model_variance = (args.getArg("model_variance").strip().lower() == 'true')
+model_variance = args.getArg("model_variance").strip().lower() == "true"
 sigma_fun = args.getArg("sigma_fun")
-use_layer_norm = (args.getArg("use_layer_norm").strip().lower() == 'true')
+use_layer_norm = args.getArg("use_layer_norm").strip().lower() == "true"
 
 num_iter = int(args.getArg("num_iter"))
 opt_type = args.getArg("opt_type")
@@ -104,7 +119,7 @@ param_radius = float(args.getArg("param_radius"))
 update_radius = float(args.getArg("update_radius"))
 batch_size = int(args.getArg("batch_size"))
 n_train = int(args.getArg("n_train"))
-use_log_form = (args.getArg("use_log_form").strip().lower() == 'true')
+use_log_form = args.getArg("use_log_form").strip().lower() == "true"
 
 ################################################################################
 # set up data and prior model
@@ -129,13 +144,20 @@ print(" -> Train.length = {0}  Test.length = {1}".format(len(trainset), len(test
 prior_dims = [obs_dim]
 prior_dims = prior_dims + z_dims
 prior_dims.append(obs_dim)
-prior = ProbMLP(name="Prior",z_dims=prior_dims, act_fun=act_fun, wght_sd=wght_sd,
-                init_type=init_type, model_variance=model_variance, sigma_fun=sigma_fun,
-                use_layer_norm=use_layer_norm)
+prior = ProbMLP(
+    name="Prior",
+    z_dims=prior_dims,
+    act_fun=act_fun,
+    wght_sd=wght_sd,
+    init_type=init_type,
+    model_variance=model_variance,
+    sigma_fun=sigma_fun,
+    use_layer_norm=use_layer_norm,
+)
 prior.set_weight_norm(param_radius=prior.param_radius)
 prior.update_radius = prior.update_radius
 prior.set_optimizer(opt_type, eta, momentum=0.9)
-#prior.l2_reg = l2_reg
+# prior.l2_reg = l2_reg
 
 ################################################################################
 # begin training prior model
@@ -153,7 +175,9 @@ print(" {0}: Train.L = {1}  Test.L = {2}".format(-1, L_train, L_test))
 patience = 20
 for it in range(num_iter):
     ptrs = np.random.permutation(len(trainset))
-    L_train = 0.0 # <-- this is a fast proxy for proper full training loss on a fixed point
+    L_train = (
+        0.0  # <-- this is a fast proxy for proper full training loss on a fixed point
+    )
     for s_ptr in range(0, len(trainset), batch_size):
         e_ptr = s_ptr + batch_size
         if e_ptr >= len(trainset):
@@ -180,13 +204,21 @@ for it in range(num_iter):
                 # L_prior = g_nll(o_tp1, o_mu, o_sigma * 0 + 1.0) #TODO try MSE
                 L_prior = mse(o_tp1, o_mu)
             if l2_reg > 0.0:
-                loss_l2 = (tf.add_n([tf.nn.l2_loss(var) for var in prior.param_var if 'W' in var.name])) * l2_reg
+                loss_l2 = (
+                    tf.add_n(
+                        [
+                            tf.nn.l2_loss(var)
+                            for var in prior.param_var
+                            if "W" in var.name
+                        ]
+                    )
+                ) * l2_reg
                 L_prior = L_prior + loss_l2
 
         prior_grad = tape.gradient(L_prior, prior.param_var)
         prior.update_params(prior_grad)
         # update biased estimate of training set loss
-        L_train = (L_prior * o_tp1.shape[0]) + L_train # un-normalize avg GNLL
+        L_train = (L_prior * o_tp1.shape[0]) + L_train  # un-normalize avg GNLL
 
     # get train GNLL
     L_train = L_train / (len(trainset) * 1.0)
