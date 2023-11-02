@@ -1,4 +1,4 @@
-# Neural Active Inference (Simplified)
+# Neural Active Inference
 This repository holds the code for paper *A Neural Active Inference Model of Perceptual-Motor Learning*, which is published on *Frontiers in Computational Neuroscience*, 2023. In this work, we propose an active inference (AI) agent based on an artificial neural network trained via backpropagation of errors (backprop). This model embodies a key assumptions:
 1) A simplified model is sufficient for reasonably-sized state spaces (like Mountain Car, Cartpole, etc.) -- thus this model only jointly adapts a transition model and an expected free energy (EFE) model at each time step.
 2) We only need the simple Q-learning bootstrap principle to train this system (as opposed to policy gradients)
