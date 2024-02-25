@@ -1,20 +1,16 @@
 import os
-import sys, getopt, optparse
-import pickle
+import sys, getopt
 sys.path.insert(0, 'utils/')
 sys.path.insert(0, 'model/')
 import tensorflow as tf
 import numpy as np
-import gym
-from gym import wrappers
-from utils import parse_int_list, mse, save_object, g_nll_from_logvar, load_object, g_nll
-from prob_mlp import ProbMLP
-from config import Config
+from utils import parse_int_list, save_object, g_nll_from_logvar, g_nll
+from model.prob_mlp import ProbMLP
+from utils.config import Config
 
 """
 Trains the prior (preference) model for use with the proposed QAIModel agent.
 
-@author Alexander G. Ororbia
 """
 
 def create_data_lists(expert_batch_fname):

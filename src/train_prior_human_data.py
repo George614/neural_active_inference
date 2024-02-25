@@ -3,12 +3,10 @@
 Train the local prior preference model with human data (on interception) to use 
 with the proposed QAIModel agent.
 
-@author: Zhizhuo (George) Yang
 """
 import os
 import logging
-import sys, getopt, optparse
-import pickle
+import sys, getopt
 
 sys.path.insert(0, "utils/")
 sys.path.insert(0, "model/")
@@ -21,11 +19,10 @@ from utils import (
     mse,
     save_object,
     g_nll_from_logvar,
-    load_object,
     g_nll,
 )
-from prob_mlp import ProbMLP
-from config import Config
+from model.prob_mlp import ProbMLP
+from utils.config import Config
 
 
 def eval_model(model, test_set, mem_batch_size):

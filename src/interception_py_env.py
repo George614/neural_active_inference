@@ -8,8 +8,6 @@ from gym.utils import seeding
 """
 Simulation environment of an interception task based on
 OpenAI gym.
-
-@author: Zhizhuo (George) Yang
 """
 
 

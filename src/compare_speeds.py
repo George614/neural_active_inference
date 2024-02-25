@@ -3,15 +3,11 @@
 Loaded agents trained using different prior functions
 then record their speeds during an episode on the interception
 task under different target initial speeds.
-
-@author: Zhizhuo (George) Yang
 """
+
 import os
 import logging
 import sys
-import pickle
-import copy
-import time
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 import tensorflow as tf

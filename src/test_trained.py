@@ -5,13 +5,10 @@ Options include:
 1. Generating a video of the trajectory for the test episode.
 2. Generating a video of the EFE values for each action throughout the episode.
 3. Combining 2 videos generated previously into a synced avi.
-
-@author: Zhizhuo (George) Yang
 """
 import os
 import logging
 import sys
-import pickle
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # FATAL
 logging.getLogger("tensorflow").setLevel(logging.FATAL)

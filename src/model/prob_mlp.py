@@ -1,8 +1,5 @@
 import tensorflow as tf
-import sys
 from utils import init_weights, softmax, decide_fun
-import numpy as np
-import copy
 
 """
 Basic multi-layer perceptron designed to model distributions with up to

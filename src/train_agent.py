@@ -1,7 +1,6 @@
 import os
 import logging
-import sys, getopt, optparse
-import pickle
+import sys, getopt
 import shutil
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
@@ -10,13 +9,13 @@ import numpy as np
 import gym
 sys.path.insert(0, 'utils/')
 from collections import deque
-from utils import parse_int_list, save_object, load_object
-from config import Config
+from utils import save_object, load_object
+from utils.config import Config
 sys.path.insert(0, 'model/')
-from qai_model import QAIModel
+from model.qai_model import QAIModel
 from interception_py_env import InterceptionEnv
-from buffers import ReplayBuffer, NaivePrioritizedBuffer, HindsightBuffer
-from scheduler import Linear_schedule, Exponential_schedule
+from utils.buffers import ReplayBuffer, NaivePrioritizedBuffer, HindsightBuffer
+from utils.scheduler import Linear_schedule
 
 """
 Simulates the training of an active inference (AI) agent implemented by simple

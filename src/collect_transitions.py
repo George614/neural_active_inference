@@ -3,22 +3,21 @@
 Collect transitions from trained QAI agent.
 Data can be used for training prior preference
 model later on.
-
-@author: Zhizhuo (George) Yang
 """
+
 from utils import load_object
 import numpy as np
 import tensorflow as tf
 import os
 import logging
 import sys
-import pickle
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # FATAL
 logging.getLogger("tensorflow").setLevel(logging.FATAL)
 sys.path.insert(0, "utils/")
 sys.path.insert(0, "model/")
 env_id = "MountainCar-v0"  # gym env names or 'interception'
+
 if env_id == "interception":
     from interception_py_env import InterceptionEnv
 else:

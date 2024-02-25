@@ -5,7 +5,8 @@ This repository holds the code for paper *A Neural Active Inference Model of Per
 3) We simplify the Bayesian inference by assuming a uniform prior (or uninformative prior) on the parameters of our model.
 
 To run the code, you can use the following Bash commands.<br>
-To fit/train a local prior model to expert data (imitation learning), which will be later used in the active inference agent (if a local prior is desired), then run the following command (after setting desired values in <code>fit_mcar_prior.cfg</code>):
+
+To train a local prior model to expert data (imitation learning), which will be later used in the active inference agent (if a local prior is desired), then run the following command (after setting desired values in <code>fit_mcar_prior.cfg</code>):
 <pre>
 $ python train_prior.py --cfg_fname=fit_mcar_prior.cfg --gpu_id=0 
 </pre>

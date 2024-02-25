@@ -6,6 +6,7 @@ identity matrices and thus are cancelled out in this implementation
 
 @author: Alexander G. Ororbia, Zhizhuo (George) Yang
 """
+
 import tensorflow as tf
 import numpy as np
 import sys
@@ -14,7 +15,6 @@ from utils import softmax, sample_gaussian, sample_gaussian_with_logvar, \
                   g_nll_from_logvar, kl_div_loss, g_nll, kl_d, mse, load_object, \
                   entropy_gaussian_from_logvar, huber
 from prob_mlp import ProbMLP
-from config import Config
 
 class QAIModel:
     def __init__(self, prior, args):

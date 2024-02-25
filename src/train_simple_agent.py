@@ -1,7 +1,6 @@
 import os
 import logging
-import sys, getopt, optparse
-import pickle
+import sys, getopt
 import shutil
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # FATAL
@@ -12,14 +11,14 @@ import gym
 
 sys.path.insert(0, "utils/")
 from collections import deque
-from utils import parse_int_list, save_object, load_object
-from config import Config
+from utils import save_object
+from utils.config import Config
 
 sys.path.insert(0, "model/")
-from simple_qai_model import QAIModel
+from model.simple_qai_model import QAIModel
 from interception_py_env import InterceptionEnv
-from buffers import ReplayBuffer
-from scheduler import Linear_schedule
+from utils.buffers import ReplayBuffer
+from utils.scheduler import Linear_schedule
 
 """
 Simulates the training of an active inference (AI) agent implemented by simple
@@ -31,7 +30,6 @@ and expected free energy (EFE) network jointly using simple Q-learning.
 Note that this agent uses the dynamic scalar normalization proposed in
 Ororbia & Mali (2021) "Adapting to Dynamic Environments with Active Neural Generative Coding".
 
-@author Alexander G. Ororbia, Zhizhuo (George) Yang
 """
 
 

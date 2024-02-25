@@ -4,7 +4,6 @@ Loaded a trained agent, test it and record 1) mean rewards,
 2) percetange of subject pasing in front of target in failed
 episodes, 3)  and TTC plots.
 
-@author: Zhizhuo (George) Yang
 """
 import os
 import logging
@@ -26,7 +25,7 @@ sys.path.insert(0, "model/")
 from interception_py_env import InterceptionEnv
 
 sys.path.insert(0, "plotting/")
-from plot_utils import plot_TTC_boxplot, plot_grouped_hdst
+from plotting.plot_utils import plot_TTC_boxplot, plot_grouped_hdst
 from pathlib import Path
 
 folder_names = [

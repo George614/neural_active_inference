@@ -2,9 +2,8 @@
 """
 Test trained agents and record episodic (accumulated) epistemic value given 
 different target initial speeds periodicly (based on the training progress).
-
-@author: Zhizhuo (George) Yang
 """
+
 import functools
 from pathlib import Path
 from multiprocessing import Pool
@@ -16,7 +15,6 @@ import tensorflow as tf
 import os
 import logging
 import sys
-import pickle
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # FATAL
 logging.getLogger("tensorflow").setLevel(logging.FATAL)

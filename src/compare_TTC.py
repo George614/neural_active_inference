@@ -3,17 +3,15 @@
 Loaded trained agents then record their Time-To-Contacts (TTC) 
 on the interception task under different target initial
 speeds. Also record TTCs for the designed prior function.
-
-@author: Zhizhuo (George) Yang
 """
+
 from interception_py_env import InterceptionEnv
 from utils import load_object
-import numpy as np
 import tensorflow as tf
 import os
 import logging
 import sys
-import pickle
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 sys.path.insert(0, 'utils/')
