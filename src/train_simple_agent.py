@@ -27,8 +27,6 @@ artificial neural networks trainable by backpropagation of errors (backprop).
 The particular agent this code trains is called the "QAIModel" which is a
 variant of active inference that just focuses on learning a transition model
 and expected free energy (EFE) network jointly using simple Q-learning.
-Note that this agent uses the dynamic scalar normalization proposed in
-Ororbia & Mali (2021) "Adapting to Dynamic Environments with Active Neural Generative Coding".
 
 """
 

@@ -275,18 +275,12 @@ for trial in range(start_trial, n_trials):
 
     print(" >> Starting simulation...")
 
-    # for frame_idx in range(1, num_frames + 1): # deprecated
     for ep_idx in range(num_episodes):  # training using episode as cycle
         ### training the PPL model ###
         if args.getArg("env_name") == "InterceptionEnv":
             f_speed_idx = np.random.randint(3)
             env = InterceptionEnv(target_speed_idx=f_speed_idx, approach_angle_idx=3, return_prior=env_prior, use_slope=False, perfect_prior=perfect_prior)
         observation = env.reset()
-        # print("target initial speed: ", env.target_init_speed)
-        # print("time_to_change_speed: ", env.time_to_change_speed)
-        # print("target_final_speed: ", env.target_final_speed)
-        # print("==================================")
-        # init_condition = tf.expand_dims(observation[:2], axis=0)
         if action_delay:
             action_buffer = deque()
             obv_buffer = deque()
@@ -525,8 +519,6 @@ for trial in range(start_trial, n_trials):
                 pplModel.update_target()
 
         pplModel.clear_state()
-        # if ep_idx % target_update_ep == 0: # episodic update for target net
-        #     pplModel.update_target()
 
         if hindsight_learn:
             # learn from hindsight error
@@ -562,7 +554,6 @@ for trial in range(start_trial, n_trials):
         
         ### evaluate the PPL model using a number of episodes ###
         if eval_model is True:
-            #pplModel.rho.assign(0.0)
             pplModel.epsilon.assign(0.0) # use greedy policy when testing
             reward_list = []
             for _ in range(test_episodes):
@@ -580,11 +571,8 @@ for trial in range(start_trial, n_trials):
                     observation, reward, done_test, _ = env.step(action)
                     episode_reward += reward
                 reward_list.append(episode_reward)
-            #pplModel.rho.assign(1.0)
             mean_reward = np.mean(reward_list)
-            #std_reward = np.std(reward_list)
             mean_ep_reward.append(mean_reward)
-            #std_ep_reward.append(std_reward)
             episode_reward = mean_reward
         
         pplModel.clear_state()

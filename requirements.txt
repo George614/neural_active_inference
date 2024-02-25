@@ -1,0 +1,10 @@
+gym==0.25.2
+matplotlib==3.5.1
+numpy==1.22.3
+numpy==1.24.3
+opencv_python==4.7.0.72
+pandas==1.4.2
+pyglet==1.5.0
+seaborn==0.11.2
+tensorflow==2.8.0
+tqdm==4.64.1
