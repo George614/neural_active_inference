@@ -20,6 +20,18 @@ Inside the training configuration file, you can choose to use an alternative pri
 2) To use a global, hand-coded prior <pre>instru_term = prior_global</pre> which requires changing the tensor variable <code>self.global_mu</code> inside the QAIModel (in <code>src/model/qai_model.py</code>) to a vector of encoded mean values (default is <code>None</code>.
 4) To use the reward as the global prior, set <pre>instru_term = prior_reward</pre> where we justify this by appealing to the Complete Class Theorem.
 
+
+## Task Visualization
+
+Below is an animation demonstrating the trajectory of our neural active inference model trying to intercept a moving target that changes its speed during the course of the movement. The target is shown as a red sphere and the agent is represented as a green sphere. Real-time statistics of the task environment and controllable variables of the agent are shown in the upper left corner.
+
+![Neural Active Inference Model Trajectory](resources/videos/animation_trajectory.gif)
+
+This animation illustrates the anticipatory and reactive behaviors of our model during the perceptual-motor learning process.
+
+
+## Citation
+
 Please cite our article if you find our code useful using the following bibtext:
 
 ```
